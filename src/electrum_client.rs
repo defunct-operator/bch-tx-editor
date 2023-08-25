@@ -7,7 +7,6 @@ use jsonrpsee::core::{
     Error,
 };
 
-
 /// Wrapper that adds convenience methods for interacting with the [Electrum Cash
 /// Protocol](https://electrum-cash-protocol.readthedocs.io/en/latest/index.html).
 #[derive(Debug)]
