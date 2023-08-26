@@ -1,23 +1,23 @@
 #![deny(rust_2018_idioms)]
+mod components;
 mod electrum_client;
 
-use std::str::FromStr;
 use std::time::Duration;
 
 use bitcoincash::consensus::Encodable;
-use bitcoincash::{hashes, Address, Network};
 use bitcoincash::hashes::hex::ToHex;
-use bitcoincash::hashes::sha256;
+use bitcoincash::hashes::{self, sha256};
 use bitcoincash::secp256k1::{rand, Message, Secp256k1};
-use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Script, Transaction, TxIn, TxOut};
+use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Transaction, TxIn};
+use components::ParsedInput;
 use futures::future::FutureExt;
 use futures::StreamExt;
 use leptos::{
-    component, create_node_ref, create_rw_signal, create_signal, event_target_value, log,
-    mount_to_body, on_cleanup, view, CollectView, For, IntoAttribute, IntoProperty, IntoView,
-    MaybeSignal, ReadSignal, RwSignal, Signal, SignalGet, SignalUpdate, SignalWith, WriteSignal, AttributeValue,
+    component, create_rw_signal, create_signal, event_target_value, log, mount_to_body, on_cleanup,
+    view, For, IntoView, RwSignal, SignalGet, SignalUpdate, SignalWith,
 };
 
+use crate::components::tx_output::{TxOutput, TxOutputState};
 use crate::electrum_client::ElectrumClient;
 
 fn main() {
@@ -57,51 +57,6 @@ impl TryFrom<TxInputState> for TxIn {
     }
 }
 
-#[derive(Clone)]
-enum ScriptPubkeyData {
-    Hex(String),
-    Addr(String),
-}
-
-impl TryFrom<ScriptPubkeyData> for Script {
-    type Error = String;
-    fn try_from(s: ScriptPubkeyData) -> Result<Self, Self::Error> {
-        match s {
-            ScriptPubkeyData::Hex(s) => s.parse::<Script>().map_err(|e| e.to_string()),
-            ScriptPubkeyData::Addr(s) => s.parse::<Address>().map(|a| a.script_pubkey()).map_err(|e| e.to_string()),
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-struct TxOutputState {
-    value: RwSignal<u64>,
-    script_pubkey: RwSignal<ScriptPubkeyData>,
-    key: usize,
-}
-
-impl TxOutputState {
-    fn new(key: usize) -> Self {
-        Self {
-            value: create_rw_signal(0),
-            script_pubkey: create_rw_signal(ScriptPubkeyData::Hex("".into())),
-            key,
-        }
-    }
-}
-
-impl TryFrom<TxOutputState> for TxOut {
-    type Error = String;
-    fn try_from(tx_output: TxOutputState) -> Result<Self, Self::Error> {
-        let script_pubkey = tx_output.script_pubkey.get().try_into()?;
-        Ok(TxOut {
-            value: tx_output.value.get(),
-            script_pubkey,
-            token: None, // TODO
-        })
-    }
-}
-
 #[component]
 fn TxInput(tx_input: TxInputState) -> impl IntoView {
     let set_txid = tx_input.txid.write_only();
@@ -123,136 +78,6 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
                 class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono"
                 placeholder="Unlocking Script Hex"
             />
-        </div>
-    }
-}
-
-#[component]
-fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
-    let (script_pubkey, set_script_pubkey) = tx_output.script_pubkey.split();
-    let (script_format, set_script_format) = create_signal(String::from("hex"));
-    let (script_pubkey_enabled, set_script_pubkey_enabled) = create_signal(true);
-    let (script_pubkey_error, set_script_pubkey_error) = create_signal(false);
-
-    let render_script_pubkey = move || {
-        match &*script_format() {
-            "hex" => {
-                match script_pubkey() { // If empty addr or already hex, render as is
-                    ScriptPubkeyData::Addr(s) if s.is_empty() => {
-                        set_script_pubkey_enabled(true);
-                        set_script_pubkey_error(false);
-                        return s
-                    }
-                    ScriptPubkeyData::Hex(s) => {
-                        set_script_pubkey_enabled(true);
-                        set_script_pubkey_error(false);
-                        return s
-                    }
-                    _ => (),
-                }
-                match Script::try_from(script_pubkey()) {
-                    Ok(s) => {
-                        set_script_pubkey_enabled(true);
-                        set_script_pubkey_error(false);
-                        s.to_hex()
-                    }
-                    Err(e) => {
-                        set_script_pubkey_enabled(false);
-                        set_script_pubkey_error(true);
-                        e
-                    }
-                }
-            }
-            "asm" => {
-                set_script_pubkey_enabled(false);
-                let script: Result<Script, String> = script_pubkey().try_into();
-                match script {
-                    Ok(s) => {
-                        set_script_pubkey_error(false);
-                        s.asm()
-                    }
-                    Err(e) => {
-                        set_script_pubkey_error(true);
-                        e
-                    }
-                }
-            }
-            "addr" => {
-                match script_pubkey() { // If empty hex or already addr, render as is
-                    ScriptPubkeyData::Hex(s) if s.is_empty() => {
-                        set_script_pubkey_error(false);
-                        set_script_pubkey_enabled(true);
-                        return s;
-                    }
-                    ScriptPubkeyData::Addr(s) => {
-                        set_script_pubkey_error(false);
-                        set_script_pubkey_enabled(true);
-                        return s;
-                    }
-                    _ => (),
-                }
-                let script = match script_pubkey().try_into() {
-                    Ok(s) => s,
-                    Err(e) => {
-                        set_script_pubkey_error(true);
-                        set_script_pubkey_enabled(false);
-                        return e
-                    }
-                };
-                match Address::from_script(&script, Network::Bitcoin) {
-                    Ok(a) => {
-                        set_script_pubkey_enabled(true);
-                        set_script_pubkey_error(false);
-                        a.to_string()
-                    }
-                    Err(e) => {
-                        set_script_pubkey_enabled(false);
-                        set_script_pubkey_error(true);
-                        e.to_string()
-                    }
-
-                }
-            }
-            _ => {
-                set_script_pubkey_error(true);
-                set_script_pubkey_enabled(false);
-                "???".into()
-            }
-        }
-    };
-
-    view! {
-        <div class="mb-1">
-            <div class="flex">
-                <textarea
-                    rows=1
-                    on:change=move |e| {
-                        match &*script_format() {
-                            "hex" => set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e))),
-                            "addr" => set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e))),
-                            _ => unreachable!(),
-                        }
-                    }
-                    class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow"
-                    placeholder="Locking Script Hex"
-                    prop:value=render_script_pubkey
-                    disabled=move || !script_pubkey_enabled()
-                    class=("text-red-700", script_pubkey_error)
-                />
-                <div>
-                    <select
-                        class="bg-inherit border rounded ml-1 p-1"
-                        on:input=move |e| set_script_format(event_target_value(&e))
-                    >
-                        <option value="hex">Hex</option>
-                        <option value="asm">Asm</option>
-                        <option value="addr">Address</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-        <div class="my-1">
-            <ParsedInput value=tx_output.value placeholder="Sats" class="w-52"/>
         </div>
     }
 }
@@ -382,41 +207,6 @@ fn App() -> impl IntoView {
 }
 
 #[component]
-fn ParsedInput<T: FromStr + Clone + 'static>(
-    value: RwSignal<T>,
-    #[prop(default = "")] placeholder: &'static str,
-    #[prop(default = "")] class: &'static str,
-) -> impl IntoView
-where
-    ReadSignal<T>: IntoProperty,
-{
-    let (parse_success, set_parse_success) = create_signal(true);
-    let (thevalue, set_value) = value.split();
-
-    view! {
-        <input
-            on:input=move |e| {
-                let new_value = event_target_value(&e);
-                match new_value.parse() {
-                    Ok(v) => {
-                        set_value(v);
-                        set_parse_success(true);
-                    }
-                    Err(_) => {
-                        set_parse_success(false);
-                    }
-                }
-            }
-            prop:value=thevalue
-            class={move || format!("border border-solid rounded px-1 bg-inherit placeholder:text-stone-600 {}", class)}
-            class=("border-stone-600", parse_success)
-            class=("border-red-700", move || !parse_success())
-            placeholder=placeholder
-        />
-    }
-}
-
-#[component]
 fn ElectrumThingo() -> impl IntoView {
     let (cancel_send, mut cancel_recv) = futures::channel::oneshot::channel::<()>();
     on_cleanup(|| {
@@ -428,19 +218,19 @@ fn ElectrumThingo() -> impl IntoView {
             .build("wss://chipnet.imaginary.cash:50004")
             .await
             .unwrap();
-        leptos::log!("Connected");
+        log!("Connected");
         let client = ElectrumClient::new(client);
 
         // Protocol version negotiation
         let version = client.server_version("").await.unwrap();
-        leptos::log!(
+        log!(
             "Server version: {}, protocol version: {}",
             version.server_software_version,
             version.protocol_version
         );
 
         let (current_head, mut subscription) = client.blockchain_headers_subscribe().await.unwrap();
-        leptos::log!("\n{current_head:?}");
+        log!("\n{current_head:?}");
 
         futures::select! {
             _ = cancel_recv => (),
@@ -448,14 +238,14 @@ fn ElectrumThingo() -> impl IntoView {
             _ = async move {
                 loop {
                     let result = subscription.next().await;
-                    leptos::log!("\n{result:?}");
+                    log!("\n{result:?}");
                     if result.is_none() {
                         break;
                     }
                 }
             }.fuse() => (),
         }
-        leptos::log!("Disconnect");
+        log!("Disconnect");
     });
 }
 
