@@ -6,12 +6,14 @@ use leptos::{
 };
 
 pub mod tx_output;
+pub mod tracker;
 
 #[component]
 pub fn ParsedInput<T: FromStr + Clone + 'static>(
     value: RwSignal<T>,
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = "")] class: &'static str,
+    #[prop(default = "")] id: &'static str,
 ) -> impl IntoView
 where
     ReadSignal<T>: IntoProperty,
@@ -34,10 +36,11 @@ where
                 }
             }
             prop:value=thevalue
-            class={move || format!("border border-solid rounded px-1 bg-inherit placeholder:text-stone-600 {}", class)}
+            class={move || format!("border border-solid rounded px-1 bg-stone-900 placeholder:text-stone-600 {}", class)}
             class=("border-stone-600", parse_success)
             class=("border-red-700", move || !parse_success())
             placeholder=placeholder
+            id=id
         />
     }
 }

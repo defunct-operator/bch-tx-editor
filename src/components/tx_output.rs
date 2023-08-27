@@ -1,8 +1,27 @@
+use anyhow::Result;
 use bitcoincash::{hashes::hex::ToHex, Address, Network, Script, TxOut};
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, view, IntoView, RwSignal,
-    SignalGet,
+    SignalGet, SignalWith, SignalDispose,
 };
+
+use bitcoincash_addr::{Address as CashAddr, Scheme};
+
+fn cash_addr_to_script(mut addr: CashAddr) -> Script {
+    // Lazy impl, optimize if necessary
+    // CashAddr -> Base58 -> Script
+    addr.scheme = Scheme::Base58;
+    addr.encode().unwrap().parse::<Address>().unwrap().script_pubkey()
+}
+
+fn script_to_cash_addr(s: &Script, network: Network) -> Result<CashAddr> {
+    // Lazy impl, optimize if necessary
+    // Script -> Base58 -> CashAddr
+    let addr = Address::from_script(s, network)?.to_string();
+    let mut addr = CashAddr::decode(&addr).unwrap();
+    addr.scheme = Scheme::CashAddr;
+    Ok(addr)
+}
 
 use crate::components::ParsedInput;
 
@@ -37,14 +56,21 @@ impl ScriptPubkeyData {
 }
 
 impl TryFrom<ScriptPubkeyData> for Script {
-    type Error = String;
+    type Error = anyhow::Error;
     fn try_from(s: ScriptPubkeyData) -> Result<Self, Self::Error> {
         match s {
-            ScriptPubkeyData::Hex(s) => s.parse::<Script>().map_err(|e| e.to_string()),
-            ScriptPubkeyData::Addr(s) => s
-                .parse::<Address>()
-                .map(|a| a.script_pubkey())
-                .map_err(|e| e.to_string()),
+            ScriptPubkeyData::Hex(mut s) => {
+                s.retain(|c| !c.is_ascii_whitespace());
+                Ok(s.parse::<Script>()?)
+            }
+            ScriptPubkeyData::Addr(mut s) => {
+                s.retain(|c| !c.is_ascii_whitespace());
+                let addr = match CashAddr::decode(&s) {
+                    Ok(a) => a,
+                    Err((cash_addr_err, _base58_err)) => Err(cash_addr_err)?,
+                };
+                Ok(cash_addr_to_script(addr))
+            }
         }
     }
 }
@@ -64,10 +90,15 @@ impl TxOutputState {
             key,
         }
     }
+
+    pub fn dispose(self) {
+        self.value.dispose();
+        self.script_pubkey.dispose();
+    }
 }
 
 impl TryFrom<TxOutputState> for TxOut {
-    type Error = String;
+    type Error = anyhow::Error;
     fn try_from(tx_output: TxOutputState) -> Result<Self, Self::Error> {
         let script_pubkey = tx_output.script_pubkey.get().try_into()?;
         Ok(TxOut {
@@ -81,7 +112,7 @@ impl TryFrom<TxOutputState> for TxOut {
 #[component]
 pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
     let (script_pubkey, set_script_pubkey) = tx_output.script_pubkey.split();
-    let (script_format, set_script_format) = create_signal(String::from("hex"));
+    let (script_format, set_script_format) = create_signal(String::from("addr"));
     let (script_pubkey_enabled, set_script_pubkey_enabled) = create_signal(true);
     let (script_pubkey_error, set_script_pubkey_error) = create_signal(false);
 
@@ -103,13 +134,13 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     Err(e) => {
                         set_script_pubkey_enabled(false);
                         set_script_pubkey_error(true);
-                        e
+                        e.to_string()
                     }
                 }
             }
             "asm" => {
                 set_script_pubkey_enabled(false);
-                let script: Result<Script, String> = script_pubkey.try_into();
+                let script: Result<Script> = script_pubkey.try_into();
                 match script {
                     Ok(s) => {
                         set_script_pubkey_error(false);
@@ -117,7 +148,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     }
                     Err(e) => {
                         set_script_pubkey_error(true);
-                        e
+                        e.to_string()
                     }
                 }
             }
@@ -127,19 +158,19 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     set_script_pubkey_enabled(true);
                     return script_pubkey.inner();
                 }
-                let script = match script_pubkey.try_into() {
+                let script: Script = match script_pubkey.try_into() {
                     Ok(s) => s,
                     Err(e) => {
                         set_script_pubkey_error(true);
                         set_script_pubkey_enabled(false);
-                        return e;
+                        return e.to_string();
                     }
                 };
-                match Address::from_script(&script, Network::Bitcoin) {
+                match script_to_cash_addr(&script, Network::Bitcoin) {
                     Ok(a) => {
                         set_script_pubkey_enabled(true);
                         set_script_pubkey_error(false);
-                        a.to_string()
+                        a.encode().unwrap()
                     }
                     Err(e) => {
                         set_script_pubkey_enabled(false);
@@ -160,16 +191,22 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
         <div class="mb-1">
             <div class="flex">
                 <textarea
+                    spellcheck="false"
                     rows=1
                     on:change=move |e| {
-                        match &*script_format() {
+                        script_format.with(|s| match &**s {
                             "hex" => set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e))),
                             "addr" => set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e))),
                             _ => unreachable!(),
-                        }
+                        })
                     }
-                    class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow"
-                    placeholder="Locking Script Hex"
+                    class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
+                    placeholder=move || {
+                        script_format.with(|s| match &**s {
+                            "addr" => "Address",
+                            _ => "Locking Script Hex",
+                        })
+                    }
                     prop:value=render_script_pubkey
                     disabled=move || !script_pubkey_enabled()
                     class=("text-red-700", script_pubkey_error)
@@ -179,9 +216,9 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                         class="bg-inherit border rounded ml-1 p-1"
                         on:input=move |e| set_script_format(event_target_value(&e))
                     >
-                        <option value="hex">Hex</option>
-                        <option value="asm">Asm</option>
                         <option value="addr">Address</option>
+                        <option value="asm">Asm</option>
+                        <option value="hex">Hex</option>
                     </select>
                 </div>
             </div>

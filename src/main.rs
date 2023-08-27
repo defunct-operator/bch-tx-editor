@@ -3,18 +3,20 @@ mod components;
 mod electrum_client;
 
 use std::time::Duration;
+use anyhow::Result;
 
 use bitcoincash::consensus::Encodable;
 use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::hashes::{self, sha256};
 use bitcoincash::secp256k1::{rand, Message, Secp256k1};
-use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Transaction, TxIn};
+use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Transaction, TxIn, Sequence};
 use components::ParsedInput;
+use components::tracker::Tracker;
 use futures::future::FutureExt;
 use futures::StreamExt;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, log, mount_to_body, on_cleanup,
-    view, For, IntoView, RwSignal, SignalGet, SignalUpdate, SignalWith,
+    view, For, IntoView, RwSignal, SignalGet, SignalUpdate, SignalWith, SignalDispose,
 };
 
 use crate::components::tx_output::{TxOutput, TxOutputState};
@@ -28,6 +30,7 @@ fn main() {
 struct TxInputState {
     txid: RwSignal<String>,
     vout: RwSignal<u32>,
+    sequence: RwSignal<u32>,
     script_sig: RwSignal<String>,
     key: usize,
 }
@@ -37,22 +40,33 @@ impl TxInputState {
         Self {
             txid: create_rw_signal("".into()),
             vout: create_rw_signal(0),
+            sequence: create_rw_signal(4294967295),
             script_sig: create_rw_signal("".into()),
             key,
         }
+    }
+
+    fn dispose(self) {
+        self.txid.dispose();
+        self.vout.dispose();
+        self.sequence.dispose();
+        self.script_sig.dispose();
     }
 }
 
 impl TryFrom<TxInputState> for TxIn {
     type Error = hashes::hex::Error;
     fn try_from(tx_input: TxInputState) -> Result<Self, Self::Error> {
+        let mut script_sig = tx_input.script_sig.get();
+        script_sig.retain(|c| !c.is_ascii_whitespace());
         Ok(TxIn {
             previous_output: OutPoint {
                 txid: tx_input.txid.get().parse()?,
                 vout: tx_input.vout.get(),
             },
-            script_sig: tx_input.script_sig.get().parse()?,
-            ..Default::default()
+            script_sig: script_sig.parse()?,
+            sequence: Sequence(tx_input.sequence.get()),
+            witness: Default::default(),
         })
     }
 }
@@ -62,22 +76,24 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
     let set_txid = tx_input.txid.write_only();
     let set_script_sig = tx_input.script_sig.write_only();
     view! {
-        <div class="mb-1">
+        <div class="mb-1 flex">
             <input
                 on:change=move |e| set_txid(event_target_value(&e))
-                class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono"
+                class="border border-solid rounded border-stone-600 px-1 w-full bg-stone-900 placeholder:text-stone-600 font-mono grow"
                 placeholder="Transaction ID"
             />
-        </div>
-        <div class="mb-1">
+            <span>:</span>
             <ParsedInput value=tx_input.vout placeholder="Index" class="w-16"/>
         </div>
-        <div class="my-1">
+        <div class="mb-1">
             <textarea
                 on:change=move |e| set_script_sig(event_target_value(&e))
-                class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono"
+                class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono bg-stone-900"
                 placeholder="Unlocking Script Hex"
             />
+        </div>
+        <div class="my-1">
+            <ParsedInput value=tx_input.sequence placeholder="Sequence"/>
         </div>
     }
 }
@@ -106,7 +122,9 @@ fn App() -> impl IntoView {
     };
     let delete_tx_input = move |key_to_remove| {
         set_tx_inputs.update(|tx_inputs| {
-            tx_inputs.retain(|t| t.key != key_to_remove);
+            let index_to_remove = tx_inputs.iter().enumerate().find(|(_, t)| t.key == key_to_remove).unwrap().0;
+            let removed = tx_inputs.remove(index_to_remove);
+            removed.dispose();
         });
     };
     let delete_tx_output = move |key_to_remove| {
@@ -114,14 +132,14 @@ fn App() -> impl IntoView {
             tx_outputs.retain(|t| t.key != key_to_remove);
         });
     };
-    let serialize_tx = move || {
+    let serialize_tx = move || -> Result<String> {
         let input: Result<_, _> = tx_inputs.with(|tx_inputs| {
             tx_inputs
                 .iter()
                 .map(|&tx_input| tx_input.try_into())
                 .collect()
         });
-        let input = input.map_err(|e| format!("{e}"))?;
+        let input = input?;
         let output: Result<_, _> = tx_outputs.with(|tx_outputs| {
             tx_outputs
                 .iter()
@@ -137,21 +155,27 @@ fn App() -> impl IntoView {
         };
         let mut tx_serialized = vec![];
         tx.consensus_encode(&mut tx_serialized).unwrap();
-        Ok::<_, String>(tx_serialized.to_hex())
+        Ok(tx_serialized.to_hex())
     };
 
     view! {
-        <div class="m-1">
-            <p>TX version number</p>
-            <ParsedInput value=tx_version_rw placeholder="TX version"/>
+        <div class="grid grid-cols-2 max-w-xs gap-1">
+            <div>
+                <label for="tx_version">TX version number:</label>
+            </div>
+            <div>
+                <ParsedInput id="tx_version" value=tx_version_rw placeholder="2"/>
+            </div>
+            <div>
+                <label for="tx_locktime">Locktime:</label>
+            </div>
+            <div>
+                <ParsedInput id="tx_locktime" value=tx_locktime_rw placeholder="TX locktime"/>
+            </div>
         </div>
-        <div class="m-1">
-            <p>Locktime</p>
-            <ParsedInput value=tx_locktime_rw placeholder="TX locktime"/>
-        </div>
-        <div class="flex flex-wrap border">
-            <div class="border basis-[32rem] grow">
-                <p class="mx-1 mt-3">Inputs</p>
+        <div class="flex flex-wrap gap-3 mt-3">
+            <div class="basis-[32rem] grow">
+                <p class="mb-1">Inputs</p>
                 <ol start="0">
                     <For
                         each=move || 0..tx_inputs.with(Vec::len)
@@ -159,18 +183,28 @@ fn App() -> impl IntoView {
                         view=move |i| {
                             let tx_input = tx_inputs.with(|v| v[i]);
                             view! {
-                                <li class="border border-solid rounded border-stone-600 m-1 p-1">
+                                <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
                                     <TxInput tx_input=tx_input />
-                                    <button on:click=move |_| delete_tx_input(tx_input.key) class="border border-solid rounded border-stone-600">"Delete"</button>
+                                    <button
+                                        on:click=move |_| delete_tx_input(tx_input.key)
+                                        class="border border-solid rounded border-stone-600 px-2 bg-red-950"
+                                    >
+                                        "-"
+                                    </button>
                                 </li>
                             }
                         }
                     />
                 </ol>
-                <button on:click=move |_| new_tx_input() class="border border-solid rounded border-stone-600 m-1 px-2">"+"</button>
+                <button
+                    on:click=move |_| new_tx_input()
+                    class="border border-solid rounded border-stone-600 px-2"
+                >
+                    "+"
+                </button>
             </div>
-            <div class="border basis-[32rem] grow">
-                <p class="mx-1 mt-3">Outputs</p>
+            <div class="basis-[32rem] grow">
+                <p class="mb-1">Outputs</p>
                 <ol start="0">
                     <For
                         each=move || 0..tx_outputs.with(Vec::len)
@@ -178,31 +212,50 @@ fn App() -> impl IntoView {
                         view=move |i| {
                             let tx_output = tx_outputs.with(|v| v[i]);
                             view! {
-                                <li class="border border-solid rounded border-stone-600 m-1 p-1">
+                                <li class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2">
                                     <TxOutput tx_output=tx_output />
-                                    <button on:click=move |_| delete_tx_output(tx_output.key) class="border border-solid rounded border-stone-600">"Delete"</button>
+                                    <button
+                                        on:click=move |_| delete_tx_output(tx_output.key)
+                                        class="border border-solid rounded border-stone-600 px-2 bg-red-950"
+                                    >"-"</button>
                                 </li>
                             }
                         }
                     />
                 </ol>
-                <button on:click=move |_| new_tx_output() class="border border-solid rounded border-stone-600 m-1 px-2">"+"</button>
+                <button
+                    on:click=move |_| new_tx_output()
+                    class="border border-solid rounded border-stone-600 px-2"
+                >
+                    "+"
+                </button>
             </div>
         </div>
-        <div class="m-1 mt-3">
+        <div class="mt-3">
             <button
-                class="border border-solid rounded border-stone-600"
+                class="border border-solid rounded border-stone-600 px-1"
                 on:click=move |_| {
                     match serialize_tx() {
                         Ok(tx) => set_serialized_tx(tx),
-                        Err(e) => set_serialized_tx(e),
+                        Err(e) => set_serialized_tx(e.to_string()),
                     }
                 }
             >
-                "Serialize to hex"
+                "Serialize"
             </button>
+            <button
+                class="border border-solid rounded border-stone-600 px-1 mx-1"
+                on:click=move |_| {
+                    log!("deserialize");
+                }
+            >
+                "Deserialize"
+            </button>
+            <textarea
+                class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900 my-1"
+                prop:value={serialized_tx}
+            />
         </div>
-        <p>{serialized_tx}</p>
     }
 }
 
@@ -307,20 +360,5 @@ fn AddressConverter() -> impl IntoView {
             Some(s) => s,
             None => "Invalid address".into(),
         }}</p>
-    }
-}
-
-/// Consists of a button and a progress bar
-#[component]
-fn Pump(#[prop(default = 100)] max: u16) -> impl IntoView {
-    let (value, set_value) = create_signal(0);
-    view! {
-        <button
-            on:click = move |_| set_value.update(|c| *c += 1)
-            style="margin-right: 10px"
-        >
-            "Pump"
-        </button>
-        <progress max=max value=value/>
     }
 }
