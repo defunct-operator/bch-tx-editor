@@ -159,18 +159,22 @@ fn App() -> impl IntoView {
     };
 
     view! {
-        <div class="grid grid-cols-2 max-w-xs gap-1">
-            <div>
-                <label for="tx_version">TX version number:</label>
+        <div class="table">
+            <div class="table-row">
+                <div class="table-cell pr-1 pb-1">
+                    <label for="tx_version">TX version:</label>
+                </div>
+                <div class="table-cell pb-1">
+                    <ParsedInput id="tx_version" value=tx_version_rw placeholder="2"/>
+                </div>
             </div>
-            <div>
-                <ParsedInput id="tx_version" value=tx_version_rw placeholder="2"/>
-            </div>
-            <div>
-                <label for="tx_locktime">Locktime:</label>
-            </div>
-            <div>
-                <ParsedInput id="tx_locktime" value=tx_locktime_rw placeholder="TX locktime"/>
+            <div class="table-row">
+                <div class="table-cell pr-1">
+                    <label for="tx_locktime">Locktime:</label>
+                </div>
+                <div class="table-cell">
+                    <ParsedInput id="tx_locktime" value=tx_locktime_rw placeholder="TX locktime"/>
+                </div>
             </div>
         </div>
         <div class="flex flex-wrap gap-3 mt-3">
