@@ -23,6 +23,7 @@ use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
 use crate::electrum_client::ElectrumClient;
 
 fn main() {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     mount_to_body(|| view! { <App/> });
 }
 
@@ -108,20 +109,18 @@ fn App() -> impl IntoView {
     let tx_locktime_rw = create_rw_signal(0u32);
     let (tx_hex, set_tx_hex) = create_signal(String::new());
     let (tx_hex_errored, set_tx_hex_errored) = create_signal(false);
+    let (tx_input_id, set_tx_input_id) = create_signal(1);
+    let (tx_output_id, set_tx_output_id) = create_signal(1);
 
-    let mut new_tx_input = {
-        let mut id = 0;
-        move || {
-            id += 1;
-            set_tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id)));
-        }
+    let new_tx_input = move || {
+        let id = tx_input_id();
+        set_tx_input_id(id+1);
+        set_tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id)));
     };
-    let mut new_tx_output = {
-        let mut id = 0;
-        move || {
-            id += 1;
-            set_tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id)));
-        }
+    let new_tx_output = move || {
+        let id = tx_output_id();
+        set_tx_output_id(id+1);
+        set_tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id)));
     };
     let delete_tx_input = move |key_to_remove| {
         set_tx_inputs.update(|tx_inputs| {
@@ -171,7 +170,7 @@ fn App() -> impl IntoView {
         let tx_serialized = tx.serialize();
         Ok(tx_serialized.to_hex())
     };
-    let mut deserialize_tx = move || -> Result<()> {
+    let deserialize_tx = move || -> Result<()> {
         let hex = tx_hex.with(|t| Vec::from_hex(t))?;
         let tx = Transaction::deserialize(&hex)?;
 
