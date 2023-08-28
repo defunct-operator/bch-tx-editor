@@ -3,23 +3,23 @@ mod components;
 mod electrum_client;
 
 use std::time::Duration;
-use anyhow::Result;
 
-use bitcoincash::consensus::Encodable;
-use bitcoincash::hashes::hex::ToHex;
+use anyhow::Result;
+use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::hashes::{self, sha256};
+use bitcoincash::psbt::serialize::{Deserialize, Serialize};
 use bitcoincash::secp256k1::{rand, Message, Secp256k1};
-use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Transaction, TxIn, Sequence};
+use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Sequence, Transaction, TxIn};
 use components::ParsedInput;
-use components::tracker::Tracker;
+use components::tx_output::ScriptDisplayFormat;
 use futures::future::FutureExt;
 use futures::StreamExt;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, log, mount_to_body, on_cleanup,
-    view, For, IntoView, RwSignal, SignalGet, SignalUpdate, SignalWith, SignalDispose,
+    view, For, IntoView, RwSignal, SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith,
 };
 
-use crate::components::tx_output::{TxOutput, TxOutputState};
+use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
 use crate::electrum_client::ElectrumClient;
 
 fn main() {
@@ -73,13 +73,14 @@ impl TryFrom<TxInputState> for TxIn {
 
 #[component]
 fn TxInput(tx_input: TxInputState) -> impl IntoView {
-    let set_txid = tx_input.txid.write_only();
-    let set_script_sig = tx_input.script_sig.write_only();
+    let (txid, set_txid) = tx_input.txid.split();
+    let (script_sig, set_script_sig) = tx_input.script_sig.split();
     view! {
         <div class="mb-1 flex">
             <input
                 on:change=move |e| set_txid(event_target_value(&e))
                 class="border border-solid rounded border-stone-600 px-1 w-full bg-stone-900 placeholder:text-stone-600 font-mono grow"
+                prop:value=txid
                 placeholder="Transaction ID"
             />
             <span>:</span>
@@ -90,6 +91,7 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
                 on:change=move |e| set_script_sig(event_target_value(&e))
                 class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono bg-stone-900"
                 placeholder="Unlocking Script Hex"
+                prop:value=script_sig
             />
         </div>
         <div class="my-1">
@@ -104,7 +106,8 @@ fn App() -> impl IntoView {
     let (tx_outputs, set_tx_outputs) = create_signal(vec![TxOutputState::new(0)]);
     let tx_version_rw = create_rw_signal(2i32);
     let tx_locktime_rw = create_rw_signal(0u32);
-    let (serialized_tx, set_serialized_tx) = create_signal(String::new());
+    let (tx_hex, set_tx_hex) = create_signal(String::new());
+    let (tx_hex_errored, set_tx_hex_errored) = create_signal(false);
 
     let mut new_tx_input = {
         let mut id = 0;
@@ -122,14 +125,26 @@ fn App() -> impl IntoView {
     };
     let delete_tx_input = move |key_to_remove| {
         set_tx_inputs.update(|tx_inputs| {
-            let index_to_remove = tx_inputs.iter().enumerate().find(|(_, t)| t.key == key_to_remove).unwrap().0;
+            let index_to_remove = tx_inputs
+                .iter()
+                .enumerate()
+                .find(|(_, t)| t.key == key_to_remove)
+                .unwrap()
+                .0;
             let removed = tx_inputs.remove(index_to_remove);
             removed.dispose();
         });
     };
     let delete_tx_output = move |key_to_remove| {
         set_tx_outputs.update(|tx_outputs| {
-            tx_outputs.retain(|t| t.key != key_to_remove);
+            let index_to_remove = tx_outputs
+                .iter()
+                .enumerate()
+                .find(|(_, t)| t.key == key_to_remove)
+                .unwrap()
+                .0;
+            let removed = tx_outputs.remove(index_to_remove);
+            removed.dispose();
         });
     };
     let serialize_tx = move || -> Result<String> {
@@ -153,9 +168,67 @@ fn App() -> impl IntoView {
             input,
             output,
         };
-        let mut tx_serialized = vec![];
-        tx.consensus_encode(&mut tx_serialized).unwrap();
+        let tx_serialized = tx.serialize();
         Ok(tx_serialized.to_hex())
+    };
+    let mut deserialize_tx = move || -> Result<()> {
+        let hex = tx_hex.with(|t| Vec::from_hex(t))?;
+        let tx = Transaction::deserialize(&hex)?;
+
+        let mut current_input_len = 0;
+        set_tx_inputs.update(|tx_inputs| {
+            if tx_inputs.len() > tx.input.len() {
+                for tx_input in tx_inputs.drain(tx.input.len()..) {
+                    tx_input.dispose();
+                }
+            }
+            current_input_len = tx_inputs.len();
+        });
+        let mut current_output_len = 0;
+        set_tx_outputs.update(|tx_outputs| {
+            if tx_outputs.len() > tx.output.len() {
+                for tx_output in tx_outputs.drain(tx.output.len()..) {
+                    tx_output.dispose();
+                }
+            }
+            current_output_len = tx_outputs.len();
+        });
+
+        for _ in current_input_len..tx.input.len() {
+            new_tx_input();
+        }
+        for _ in current_output_len..tx.output.len() {
+            new_tx_output();
+        }
+
+        tx_version_rw.set(tx.version);
+        tx_locktime_rw.set(tx.lock_time.0);
+
+        tx_inputs.with(|tx_inputs| {
+            for (i, input) in tx.input.iter().enumerate() {
+                tx_inputs[i]
+                    .txid
+                    .set(input.previous_output.txid.to_string());
+                tx_inputs[i].vout.set(input.previous_output.vout);
+                tx_inputs[i].script_sig.set(input.script_sig.to_hex());
+                tx_inputs[i].sequence.set(input.sequence.0);
+            }
+        });
+
+        tx_outputs.with(|tx_outputs| {
+            for (i, output) in tx.output.iter().enumerate() {
+                let script_pubkey_hex = output.script_pubkey.to_hex();
+                if script_pubkey_hex.starts_with("6a") {
+                    // OP_RETURN script
+                    tx_outputs[i].script_display_format.set(ScriptDisplayFormat::Asm);
+                }
+                tx_outputs[i]
+                    .script_pubkey
+                    .set(ScriptPubkeyData::Hex(script_pubkey_hex));
+                tx_outputs[i].value.set(output.value);
+            }
+        });
+        Ok(())
     };
 
     view! {
@@ -240,8 +313,14 @@ fn App() -> impl IntoView {
                 class="border border-solid rounded border-stone-600 px-1"
                 on:click=move |_| {
                     match serialize_tx() {
-                        Ok(tx) => set_serialized_tx(tx),
-                        Err(e) => set_serialized_tx(e.to_string()),
+                        Ok(tx) => {
+                            set_tx_hex_errored(false);
+                            set_tx_hex(tx);
+                        }
+                        Err(e) => {
+                            set_tx_hex_errored(true);
+                            set_tx_hex(e.to_string());
+                        }
                     }
                 }
             >
@@ -250,14 +329,25 @@ fn App() -> impl IntoView {
             <button
                 class="border border-solid rounded border-stone-600 px-1 mx-1"
                 on:click=move |_| {
-                    log!("deserialize");
+                    match deserialize_tx() {
+                        Ok(_) => (),
+                        Err(e) => {
+                            log!("Deserialization error: {e}");
+                            set_tx_hex_errored(true);
+                        }
+                    }
                 }
             >
                 "Deserialize"
             </button>
             <textarea
-                class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900 my-1"
-                prop:value={serialized_tx}
+                spellcheck="false"
+                class="border border-solid rounded border-stone-600 px-1 w-full placeholder:text-stone-600 font-mono grow my-1"
+                class=("bg-stone-900", move || !tx_hex_errored())
+                class=("bg-red-950", tx_hex_errored)
+                on:input=move |_| set_tx_hex_errored(false)
+                on:change=move |e| set_tx_hex(event_target_value(&e))
+                prop:value={tx_hex}
             />
         </div>
     }

@@ -76,9 +76,36 @@ impl TryFrom<ScriptPubkeyData> for Script {
 }
 
 #[derive(Copy, Clone)]
+pub enum ScriptDisplayFormat {
+    Addr,
+    Asm,
+    Hex,
+}
+
+impl ScriptDisplayFormat {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            Self::Addr => "addr",
+            Self::Asm => "asm",
+            Self::Hex => "hex",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "addr" => Some(Self::Addr),
+            "asm" => Some(Self::Asm),
+            "hex" => Some(Self::Hex),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 pub struct TxOutputState {
     pub value: RwSignal<u64>,
     pub script_pubkey: RwSignal<ScriptPubkeyData>,
+    pub script_display_format: RwSignal<ScriptDisplayFormat>,
     pub key: usize,
 }
 
@@ -87,6 +114,7 @@ impl TxOutputState {
         Self {
             value: create_rw_signal(0),
             script_pubkey: create_rw_signal(ScriptPubkeyData::Hex("".into())),
+            script_display_format: create_rw_signal(ScriptDisplayFormat::Addr),
             key,
         }
     }
@@ -94,6 +122,7 @@ impl TxOutputState {
     pub fn dispose(self) {
         self.value.dispose();
         self.script_pubkey.dispose();
+        self.script_display_format.dispose();
     }
 }
 
@@ -112,14 +141,14 @@ impl TryFrom<TxOutputState> for TxOut {
 #[component]
 pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
     let (script_pubkey, set_script_pubkey) = tx_output.script_pubkey.split();
-    let (script_format, set_script_format) = create_signal(String::from("addr"));
+    let (script_format, set_script_format) = tx_output.script_display_format.split();
     let (script_pubkey_enabled, set_script_pubkey_enabled) = create_signal(true);
     let (script_pubkey_error, set_script_pubkey_error) = create_signal(false);
 
     let render_script_pubkey = move || {
         let script_pubkey = script_pubkey();
-        match &*script_format() {
-            "hex" => {
+        match script_format() {
+            ScriptDisplayFormat::Hex => {
                 if script_pubkey.empty_or_hex() {
                     set_script_pubkey_enabled(true);
                     set_script_pubkey_error(false);
@@ -138,7 +167,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     }
                 }
             }
-            "asm" => {
+            ScriptDisplayFormat::Asm => {
                 set_script_pubkey_enabled(false);
                 let script: Result<Script> = script_pubkey.try_into();
                 match script {
@@ -152,7 +181,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     }
                 }
             }
-            "addr" => {
+            ScriptDisplayFormat::Addr => {
                 if script_pubkey.empty_or_addr() {
                     set_script_pubkey_error(false);
                     set_script_pubkey_enabled(true);
@@ -179,11 +208,6 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     }
                 }
             }
-            _ => {
-                set_script_pubkey_error(true);
-                set_script_pubkey_enabled(false);
-                "???".into()
-            }
         }
     };
 
@@ -194,18 +218,22 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     spellcheck="false"
                     rows=1
                     on:change=move |e| {
-                        script_format.with(|s| match &**s {
-                            "hex" => set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e))),
-                            "addr" => set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e))),
+                        match script_format() {
+                            ScriptDisplayFormat::Hex => {
+                                set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e)));
+                            }
+                            ScriptDisplayFormat::Addr => {
+                                set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e)));
+                            }
                             _ => unreachable!(),
-                        })
+                        }
                     }
                     class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
                     placeholder=move || {
-                        script_format.with(|s| match &**s {
-                            "addr" => "Address",
+                        match script_format() {
+                            ScriptDisplayFormat::Addr => "Address",
                             _ => "Locking Script Hex",
-                        })
+                        }
                     }
                     prop:value=render_script_pubkey
                     disabled=move || !script_pubkey_enabled()
@@ -214,11 +242,14 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                 <div>
                     <select
                         class="bg-inherit border rounded ml-1 p-1"
-                        on:input=move |e| set_script_format(event_target_value(&e))
+                        on:input=move |e| {
+                            set_script_format(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                        }
+                        prop:value={move || script_format().to_str()}
                     >
-                        <option value="addr">Address</option>
-                        <option value="asm">Asm</option>
-                        <option value="hex">Hex</option>
+                        <option value={|| ScriptDisplayFormat::Addr.to_str()}>Address</option>
+                        <option value={|| ScriptDisplayFormat::Asm.to_str()}>Asm</option>
+                        <option value={|| ScriptDisplayFormat::Hex.to_str()}>Hex</option>
                     </select>
                 </div>
             </div>
