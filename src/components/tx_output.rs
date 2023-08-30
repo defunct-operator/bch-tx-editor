@@ -1,26 +1,66 @@
 use anyhow::Result;
-use bitcoincash::{hashes::hex::ToHex, Address, Network, Script, TxOut};
+use bitcoincash::{hashes::hex::ToHex, Address, Network, Script, TxOut, blockdata::{script::Builder, opcodes}};
+use cashaddr::CashEnc;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, view, IntoView, RwSignal,
     SignalGet, SignalWith, SignalDispose,
 };
 
-use bitcoincash_addr::{Address as CashAddr, Scheme};
-
-fn cash_addr_to_script(mut addr: CashAddr) -> Script {
-    // Lazy impl, optimize if necessary
-    // CashAddr -> Base58 -> Script
-    addr.scheme = Scheme::Base58;
-    addr.encode().unwrap().parse::<Address>().unwrap().script_pubkey()
+fn cash_addr_to_script(addr: &str) -> Result<Script> {
+    match addr.parse::<cashaddr::Payload>() {
+        Ok(addr) => match addr.hash_type().numeric_value() {
+            0 | 2 => { // p2pkh, token-aware p2pkh
+                Ok(Builder::new()
+                    .push_opcode(opcodes::all::OP_DUP)
+                    .push_opcode(opcodes::all::OP_HASH160)
+                    .push_slice(&addr)
+                    .push_opcode(opcodes::all::OP_EQUALVERIFY)
+                    .push_opcode(opcodes::all::OP_CHECKSIG)
+                    .into_script())
+            }
+            1 | 3 => match addr.len() { // p2sh, token-aware p2sh
+                20 => Ok(Builder::new()
+                    .push_opcode(opcodes::all::OP_HASH160)
+                    .push_slice(&addr)
+                    .push_opcode(opcodes::all::OP_EQUAL)
+                    .into_script()),
+                32 => Ok(Builder::new()
+                    .push_opcode(opcodes::all::OP_HASH256)
+                    .push_slice(&addr)
+                    .push_opcode(opcodes::all::OP_EQUAL)
+                    .into_script()),
+                _ => anyhow::bail!("unknown CashAddress type"),
+            }
+            _ => anyhow::bail!("unknown CashAddress type"),
+        }
+        Err(e) => {
+            let Ok(addr) = addr.parse::<Address>() else { Err(e)? };
+            Ok(addr.script_pubkey())
+        }
+    }
 }
 
-fn script_to_cash_addr(s: &Script, network: Network) -> Result<CashAddr> {
-    // Lazy impl, optimize if necessary
-    // Script -> Base58 -> CashAddr
-    let addr = Address::from_script(s, network)?.to_string();
-    let mut addr = CashAddr::decode(&addr).unwrap();
-    addr.scheme = Scheme::CashAddr;
-    Ok(addr)
+fn is_p2sh32(s: &Script) -> bool {
+    let s = s.as_bytes();
+    s.len() == 35
+        && s[0] == opcodes::all::OP_HASH256.to_u8()
+        && s[1] == opcodes::all::OP_PUSHBYTES_32.to_u8()
+        && s[34] == opcodes::all::OP_EQUAL.to_u8()
+}
+
+fn script_to_cash_addr(s: &Script, network: Network) -> Result<String> {
+    if is_p2sh32(s) {
+        let hash = &s.as_bytes()[2..34];
+        return Ok(hash.encode_p2sh("bitcoincash")?);
+    } else if s.is_p2sh() {
+        let hash = &s.as_bytes()[2..22];
+        return Ok(hash.encode_p2sh("bitcoincash")?);
+    } else if s.is_p2pkh() {
+        let hash = &s.as_bytes()[3..23];
+        return Ok(hash.encode_p2pkh("bitcoincash")?);
+    } else {
+        anyhow::bail!("Unknown script type");
+    }
 }
 
 use crate::components::ParsedInput;
@@ -63,13 +103,8 @@ impl TryFrom<ScriptPubkeyData> for Script {
                 s.retain(|c| !c.is_ascii_whitespace());
                 Ok(s.parse::<Script>()?)
             }
-            ScriptPubkeyData::Addr(mut s) => {
-                s.retain(|c| !c.is_ascii_whitespace());
-                let addr = match CashAddr::decode(&s) {
-                    Ok(a) => a,
-                    Err((cash_addr_err, _base58_err)) => Err(cash_addr_err)?,
-                };
-                Ok(cash_addr_to_script(addr))
+            ScriptPubkeyData::Addr(s) => {
+                cash_addr_to_script(&s)
             }
         }
     }
@@ -199,7 +234,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                     Ok(a) => {
                         set_script_pubkey_enabled(true);
                         set_script_pubkey_error(false);
-                        a.encode().unwrap()
+                        a
                     }
                     Err(e) => {
                         set_script_pubkey_enabled(false);

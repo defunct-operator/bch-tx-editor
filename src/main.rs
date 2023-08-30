@@ -434,24 +434,3 @@ fn SimpleWallet() -> impl IntoView {
         </p>
     }
 }
-
-fn convert(input: &str) -> Option<String> {
-    cashaddr::convert::from_legacy(input, "bitcoincash")
-        .or_else(|_| cashaddr::convert::to_legacy(input))
-        .ok()
-}
-#[component]
-fn AddressConverter() -> impl IntoView {
-    let (value, set_value) = create_signal(String::new());
-
-    view! {
-        "Convert address: "
-        <input
-            on:change=move |e| set_value(event_target_value(&e))
-        />
-        <p>{move || match value.with(|v| convert(v)) {
-            Some(s) => s,
-            None => "Invalid address".into(),
-        }}</p>
-    }
-}
