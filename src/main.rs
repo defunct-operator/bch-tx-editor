@@ -81,7 +81,7 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
     let (script_enabled, set_script_enabled) = create_signal(true);
     let (script_error, set_script_error) = create_signal(false);
 
-    let parsed_input_id = format!("tx-input-sn-{}", tx_input.key);
+    let parsed_input_seq_id = format!("tx-input-sn-{}", tx_input.key);
 
     let try_render_script = move || -> Result<String> {
         match &*script_format() {
@@ -151,8 +151,8 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
             </div>
         </div>
         <div class="my-1">
-            <label class="mr-1" for=parsed_input_id.clone()>Sequence Number:</label>
-            <ParsedInput id=parsed_input_id value=tx_input.sequence placeholder="Sequence"/>
+            <label class="mr-1" for=parsed_input_seq_id.clone()>Sequence Number:</label>
+            <ParsedInput id=parsed_input_seq_id value=tx_input.sequence placeholder="Sequence"/>
         </div>
     }
 }

@@ -180,6 +180,8 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
     let (script_pubkey_enabled, set_script_pubkey_enabled) = create_signal(true);
     let (script_pubkey_error, set_script_pubkey_error) = create_signal(false);
 
+    let parsed_input_val_id = format!("tx-output-val-{}", tx_output.key);
+
     let render_script_pubkey = move || {
         let script_pubkey = script_pubkey();
         match script_format() {
@@ -288,7 +290,8 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
             </div>
         </div>
         <div class="my-1">
-            <ParsedInput value=tx_output.value placeholder="Sats" class="w-52" id=""/>
+            <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
+            <ParsedInput id=parsed_input_val_id value=tx_output.value placeholder="Sats" class="w-52"/>
         </div>
     }
 }
