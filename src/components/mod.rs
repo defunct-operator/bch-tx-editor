@@ -2,22 +2,23 @@ use std::str::FromStr;
 
 use leptos::{
     component, create_signal, event_target_value, view, IntoProperty, IntoView, ReadSignal,
-    RwSignal,
+    RwSignal, Oco,
 };
 
 pub mod tx_output;
 pub mod tracker;
 
 #[component]
-pub fn ParsedInput<T: FromStr + Clone + 'static>(
+pub fn ParsedInput<T: FromStr + Clone + 'static, I: Into<Oco<'static, str>>>(
     value: RwSignal<T>,
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = "")] class: &'static str,
-    #[prop(default = "")] id: &'static str,
+    id: I,
 ) -> impl IntoView
 where
     ReadSignal<T>: IntoProperty,
 {
+    let id = id.into();
     let (parse_success, set_parse_success) = create_signal(true);
     let (thevalue, set_value) = value.split();
 

@@ -247,50 +247,48 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
     };
 
     view! {
-        <div class="mb-1">
-            <div class="flex">
-                <textarea
-                    spellcheck="false"
-                    rows=1
-                    on:change=move |e| {
-                        match script_format() {
-                            ScriptDisplayFormat::Hex => {
-                                set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e)));
-                            }
-                            ScriptDisplayFormat::Addr => {
-                                set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e)));
-                            }
-                            _ => unreachable!(),
+        <div class="mb-1 flex">
+            <textarea
+                spellcheck="false"
+                rows=1
+                on:change=move |e| {
+                    match script_format() {
+                        ScriptDisplayFormat::Hex => {
+                            set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e)));
                         }
+                        ScriptDisplayFormat::Addr => {
+                            set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e)));
+                        }
+                        _ => unreachable!(),
                     }
-                    class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
-                    placeholder=move || {
-                        match script_format() {
-                            ScriptDisplayFormat::Addr => "Address",
-                            _ => "Locking Script Hex",
-                        }
+                }
+                class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
+                placeholder=move || {
+                    match script_format() {
+                        ScriptDisplayFormat::Addr => "Address",
+                        _ => "Locking Script Hex",
                     }
-                    prop:value=render_script_pubkey
-                    disabled=move || !script_pubkey_enabled()
-                    class=("text-red-700", script_pubkey_error)
-                />
-                <div>
-                    <select
-                        class="bg-inherit border rounded ml-1 p-1"
-                        on:input=move |e| {
-                            set_script_format(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
-                        }
-                        prop:value={move || script_format().to_str()}
-                    >
-                        <option value={|| ScriptDisplayFormat::Addr.to_str()}>Address</option>
-                        <option value={|| ScriptDisplayFormat::Asm.to_str()}>Asm</option>
-                        <option value={|| ScriptDisplayFormat::Hex.to_str()}>Hex</option>
-                    </select>
-                </div>
+                }
+                prop:value=render_script_pubkey
+                disabled=move || !script_pubkey_enabled()
+                class=("text-red-700", script_pubkey_error)
+            />
+            <div>
+                <select
+                    class="bg-inherit border rounded ml-1 p-1"
+                    on:input=move |e| {
+                        set_script_format(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                    }
+                    prop:value={move || script_format().to_str()}
+                >
+                    <option value={|| ScriptDisplayFormat::Addr.to_str()}>Address</option>
+                    <option value={|| ScriptDisplayFormat::Asm.to_str()}>Asm</option>
+                    <option value={|| ScriptDisplayFormat::Hex.to_str()}>Hex</option>
+                </select>
             </div>
         </div>
         <div class="my-1">
-            <ParsedInput value=tx_output.value placeholder="Sats" class="w-52"/>
+            <ParsedInput value=tx_output.value placeholder="Sats" class="w-52" id=""/>
         </div>
     }
 }
