@@ -132,7 +132,7 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
                 on:change=move |e| set_script_sig(event_target_value(&e))
                 class=concat!(
                     "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
-                    "placeholder:text-stone-600 font-mono bg-stone-900",
+                    "placeholder:text-stone-600 font-mono bg-stone-900 grow",
                 )
                 placeholder="Unlocking Script Hex"
                 prop:value=render_script
