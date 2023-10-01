@@ -10,14 +10,15 @@ use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::hashes::{self, sha256};
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
 use bitcoincash::secp256k1::{rand, Message, Secp256k1};
-use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Sequence, Transaction, TxIn, Script};
-use components::ParsedInput;
+use bitcoincash::{KeyPair, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn};
 use components::tx_output::ScriptDisplayFormat;
+use components::ParsedInput;
 use futures::future::FutureExt;
 use futures::StreamExt;
 use leptos::{
-    component, create_rw_signal, create_signal, event_target_value, log, mount_to_body, on_cleanup,
-    view, For, IntoView, RwSignal, SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith,
+    component, create_rw_signal, create_signal, event_target_value, logging::log, mount_to_body,
+    on_cleanup, view, For, IntoView, RwSignal, SignalDispose, SignalGet, SignalSet, SignalUpdate,
+    SignalWith,
 };
 
 use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
@@ -95,20 +96,18 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
                 s.retain(|c| !c.is_ascii_whitespace());
                 let s = Script::from_hex(&s)?;
                 Ok(s.asm())
-            },
+            }
             _ => unreachable!(),
         }
     };
-    let render_script = move || {
-        match try_render_script() {
-            Ok(s) => {
-                set_script_error(false);
-                s
-            }
-            Err(e) => {
-                set_script_error(true);
-                e.to_string()
-            }
+    let render_script = move || match try_render_script() {
+        Ok(s) => {
+            set_script_error(false);
+            s
+        }
+        Err(e) => {
+            set_script_error(true);
+            e.to_string()
         }
     };
 
@@ -170,12 +169,12 @@ fn App() -> impl IntoView {
 
     let new_tx_input = move || {
         let id = tx_input_id();
-        set_tx_input_id(id+1);
+        set_tx_input_id(id + 1);
         set_tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id)));
     };
     let new_tx_output = move || {
         let id = tx_output_id();
-        set_tx_output_id(id+1);
+        set_tx_output_id(id + 1);
         set_tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id)));
     };
     let delete_tx_input = move |key_to_remove| {
@@ -275,7 +274,9 @@ fn App() -> impl IntoView {
                 let script_pubkey_hex = output.script_pubkey.to_hex();
                 if script_pubkey_hex.starts_with("6a") {
                     // OP_RETURN script
-                    tx_outputs[i].script_display_format.set(ScriptDisplayFormat::Asm);
+                    tx_outputs[i]
+                        .script_display_format
+                        .set(ScriptDisplayFormat::Asm);
                 }
                 tx_outputs[i]
                     .script_pubkey
@@ -312,7 +313,9 @@ fn App() -> impl IntoView {
                     <For
                         each=move || 0..tx_inputs.with(Vec::len)
                         key=move |i| tx_inputs.with(|v| v[*i].key)
-                        view=move |i| {
+                        let:i
+                    >
+                        {
                             let tx_input = tx_inputs.with(|v| v[i]);
                             view! {
                                 <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
@@ -326,7 +329,7 @@ fn App() -> impl IntoView {
                                 </li>
                             }
                         }
-                    />
+                    </For>
                 </ol>
                 <button
                     on:click=move |_| new_tx_input()
@@ -341,7 +344,9 @@ fn App() -> impl IntoView {
                     <For
                         each=move || 0..tx_outputs.with(Vec::len)
                         key=move |i| tx_outputs.with(|v| v[*i].key)
-                        view=move |i| {
+                        let:i
+                    >
+                        {
                             let tx_output = tx_outputs.with(|v| v[i]);
                             view! {
                                 <li class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2">
@@ -353,7 +358,7 @@ fn App() -> impl IntoView {
                                 </li>
                             }
                         }
-                    />
+                    </For>
                 </ol>
                 <button
                     on:click=move |_| new_tx_output()

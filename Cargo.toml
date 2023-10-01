@@ -11,7 +11,7 @@ cashaddr = "0.2.0"
 getrandom = { version = "0.2.10", features = ["js"] }
 gloo = { version = "0.10.0", features = ["timers", "futures"] }
 jsonrpsee = { version = "0.20.0", features = ["wasm-client", "client-web-transport"] }
-leptos = { version = "0.5.0-beta", features = ["nightly", "csr"] }
+leptos = { version = "0.5.0", features = ["nightly", "csr"] }
 serde = { version = "1.0", features = ["derive"] }
 futures = "0.3"
 tokio-util = "0.7.8"

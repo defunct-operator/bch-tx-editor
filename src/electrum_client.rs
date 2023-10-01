@@ -83,7 +83,7 @@ impl<T: ClientT + SubscriptionClientT> ElectrumClient<T> {
             gloo::timers::future::sleep(Duration::from_secs(60)).await;
             let ping_result = self.server_ping().await;
             if let Err(e) = ping_result {
-                leptos::error!("Ping failed: {e:?}");
+                leptos::logging::error!("Ping failed: {e:?}");
             }
         }
     }
