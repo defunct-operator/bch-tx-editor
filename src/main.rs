@@ -2,7 +2,6 @@
 mod components;
 mod electrum_client;
 
-use std::rc::Rc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -142,7 +141,7 @@ fn TxInput(tx_input: TxInputState) -> impl IntoView {
                 <select
                     class="bg-inherit border rounded ml-1 p-1"
                     on:input=move |e| set_script_format(event_target_value(&e))
-                    prop:value={move || script_format()}
+                    prop:value={script_format}
                 >
                     <option value="hex">Hex</option>
                     <option value="asm">Asm</option>

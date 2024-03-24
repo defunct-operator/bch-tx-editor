@@ -1,12 +1,12 @@
 use std::str::FromStr;
 
 use leptos::{
-    component, create_signal, event_target_value, view, IntoProperty, IntoView, ReadSignal,
-    RwSignal, Oco,
+    component, create_signal, event_target_value, view, IntoProperty, IntoView, Oco, ReadSignal,
+    RwSignal,
 };
 
-pub mod tx_output;
 pub mod tracker;
+pub mod tx_output;
 
 #[component]
 pub fn ParsedInput<T: FromStr + Clone + 'static, I: Into<Oco<'static, str>>>(

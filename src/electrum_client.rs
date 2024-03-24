@@ -4,7 +4,7 @@ use futures::{Stream, StreamExt};
 use jsonrpsee::core::{
     client::{ClientT, SubscriptionClientT},
     params::ArrayParams,
-    Error,
+    ClientError as Error,
 };
 
 /// Wrapper that adds convenience methods for interacting with the [Electrum Cash

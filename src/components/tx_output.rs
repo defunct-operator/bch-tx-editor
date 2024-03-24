@@ -1,15 +1,20 @@
 use anyhow::Result;
-use bitcoincash::{hashes::hex::ToHex, Address, Network, Script, TxOut, blockdata::{script::Builder, opcodes}};
+use bitcoincash::{
+    blockdata::{opcodes, script::Builder},
+    hashes::hex::ToHex,
+    Address, Network, Script, TxOut,
+};
 use cashaddr::CashEnc;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, view, IntoView, RwSignal,
-    SignalGet, SignalWith, SignalDispose,
+    SignalDispose, SignalGet,
 };
 
 fn cash_addr_to_script(addr: &str) -> Result<Script> {
     match addr.parse::<cashaddr::Payload>() {
         Ok(addr) => match addr.hash_type().numeric_value() {
-            0 | 2 => { // p2pkh, token-aware p2pkh
+            0 | 2 => {
+                // p2pkh, token-aware p2pkh
                 Ok(Builder::new()
                     .push_opcode(opcodes::all::OP_DUP)
                     .push_opcode(opcodes::all::OP_HASH160)
@@ -18,7 +23,8 @@ fn cash_addr_to_script(addr: &str) -> Result<Script> {
                     .push_opcode(opcodes::all::OP_CHECKSIG)
                     .into_script())
             }
-            1 | 3 => match addr.len() { // p2sh, token-aware p2sh
+            1 | 3 => match addr.len() {
+                // p2sh, token-aware p2sh
                 20 => Ok(Builder::new()
                     .push_opcode(opcodes::all::OP_HASH160)
                     .push_slice(&addr)
@@ -30,11 +36,13 @@ fn cash_addr_to_script(addr: &str) -> Result<Script> {
                     .push_opcode(opcodes::all::OP_EQUAL)
                     .into_script()),
                 _ => anyhow::bail!("unknown CashAddress type"),
-            }
+            },
             _ => anyhow::bail!("unknown CashAddress type"),
-        }
+        },
         Err(e) => {
-            let Ok(addr) = addr.parse::<Address>() else { Err(e)? };
+            let Ok(addr) = addr.parse::<Address>() else {
+                Err(e)?
+            };
             Ok(addr.script_pubkey())
         }
     }
@@ -49,15 +57,20 @@ fn is_p2sh32(s: &Script) -> bool {
 }
 
 fn script_to_cash_addr(s: &Script, network: Network) -> Result<String> {
+    let prefix = match network {
+        Network::Bitcoin => "bitcoincash",
+        Network::Regtest => "bchreg",
+        Network::Testnet | Network::Testnet4 | Network::Scalenet | Network::Chipnet => "bchtest",
+    };
     if is_p2sh32(s) {
         let hash = &s.as_bytes()[2..34];
-        return Ok(hash.encode_p2sh("bitcoincash")?);
+        Ok(hash.encode_p2sh(prefix)?)
     } else if s.is_p2sh() {
         let hash = &s.as_bytes()[2..22];
-        return Ok(hash.encode_p2sh("bitcoincash")?);
+        Ok(hash.encode_p2sh(prefix)?)
     } else if s.is_p2pkh() {
         let hash = &s.as_bytes()[3..23];
-        return Ok(hash.encode_p2pkh("bitcoincash")?);
+        Ok(hash.encode_p2pkh(prefix)?)
     } else {
         anyhow::bail!("Unknown script type");
     }
@@ -103,9 +116,7 @@ impl TryFrom<ScriptPubkeyData> for Script {
                 s.retain(|c| !c.is_ascii_whitespace());
                 Ok(s.parse::<Script>()?)
             }
-            ScriptPubkeyData::Addr(s) => {
-                cash_addr_to_script(&s)
-            }
+            ScriptPubkeyData::Addr(s) => cash_addr_to_script(&s),
         }
     }
 }
