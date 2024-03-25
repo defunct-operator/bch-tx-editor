@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use leptos::{
-    component, create_signal, event_target_value, view, IntoProperty, IntoView, MaybeProp, Oco, ReadSignal, RwSignal
+    component, create_signal, event_target_value, view, IntoProperty, IntoView, MaybeProp, Oco,
+    ReadSignal, RwSignal,
 };
 
 pub mod tracker;

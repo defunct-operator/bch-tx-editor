@@ -5,6 +5,7 @@ mod electrum_client;
 use std::time::Duration;
 
 use anyhow::Result;
+use bitcoincash::blockdata::token::Capability;
 use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::hashes::{self, sha256};
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
@@ -20,7 +21,9 @@ use leptos::{
     SignalWith,
 };
 
-use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
+use crate::components::tx_output::{
+    NftCapability, NftCommitmentFormat, ScriptPubkeyData, TxOutput, TxOutputState,
+};
 use crate::electrum_client::ElectrumClient;
 
 fn main() {
@@ -268,7 +271,7 @@ fn App() -> impl IntoView {
             }
         });
 
-        tx_outputs.with(|tx_outputs| {
+        tx_outputs.with(|tx_outputs| -> Result<()> {
             for (i, output) in tx.output.iter().enumerate() {
                 let script_pubkey_hex = output.script_pubkey.to_hex();
                 if script_pubkey_hex.starts_with("6a") {
@@ -281,8 +284,62 @@ fn App() -> impl IntoView {
                     .script_pubkey
                     .set(ScriptPubkeyData::Hex(script_pubkey_hex));
                 tx_outputs[i].value.set(output.value);
+
+                match &output.token {
+                    None => {
+                        tx_outputs[i].cashtoken_enabled.set(false);
+                        tx_outputs[i].category_id.update(String::clear);
+                        tx_outputs[i].has_ft_amount.set(false);
+                        tx_outputs[i].ft_amount.set(0);
+                        tx_outputs[i].has_nft.set(false);
+                        tx_outputs[i].nft_capability.set(NftCapability::default());
+                        tx_outputs[i].nft_commitment_hex.update(String::clear);
+                        tx_outputs[i]
+                            .nft_commitment_format
+                            .set(NftCommitmentFormat::default());
+                    }
+                    Some(token_data) => {
+                        tx_outputs[i].cashtoken_enabled.set(true);
+                        tx_outputs[i].category_id.set(token_data.id.to_hex());
+                        tx_outputs[i].has_ft_amount.set(token_data.amount != 0);
+                        tx_outputs[i]
+                            .ft_amount
+                            .set(u64::try_from(token_data.amount).unwrap());
+                        let has_nft = token_data.has_nft();
+                        tx_outputs[i].has_nft.set(has_nft);
+                        if has_nft {
+                            tx_outputs[i].nft_capability.set(
+                                if (token_data.capability() & Capability::Mutable as u8) != 0 {
+                                    NftCapability::Mutable
+                                } else if (token_data.capability() & Capability::Minting as u8) != 0
+                                {
+                                    NftCapability::Minting
+                                } else {
+                                    NftCapability::Immutable
+                                },
+                            );
+                            if token_data.has_commitment_length() {
+                                tx_outputs[i]
+                                    .nft_commitment_hex
+                                    .set(token_data.commitment.to_hex());
+                            } else {
+                                tx_outputs[i].nft_commitment_hex.update(String::clear);
+                            }
+                            tx_outputs[i]
+                                .nft_commitment_format
+                                .set(NftCommitmentFormat::default());
+                        } else {
+                            tx_outputs[i].nft_capability.set(NftCapability::default());
+                            tx_outputs[i].nft_commitment_hex.update(String::clear);
+                            tx_outputs[i]
+                                .nft_commitment_format
+                                .set(NftCommitmentFormat::default());
+                        }
+                    }
+                }
             }
-        });
+            Ok(())
+        })?;
         Ok(())
     };
 
