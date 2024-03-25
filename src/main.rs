@@ -279,6 +279,10 @@ fn App() -> impl IntoView {
                     tx_outputs[i]
                         .script_display_format
                         .set(ScriptDisplayFormat::Asm);
+                } else {
+                    tx_outputs[i]
+                        .script_display_format
+                        .set(ScriptDisplayFormat::Addr);
                 }
                 tx_outputs[i]
                     .script_pubkey
