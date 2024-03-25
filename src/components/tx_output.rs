@@ -6,8 +6,7 @@ use bitcoincash::{
 };
 use cashaddr::CashEnc;
 use leptos::{
-    component, create_rw_signal, create_signal, event_target_value, view, IntoView, RwSignal,
-    SignalDispose, SignalGet,
+    component, create_rw_signal, create_signal, event_target_checked, event_target_value, view, IntoView, RwSignal, Signal, SignalDispose, SignalGet, SignalSet
 };
 
 fn cash_addr_to_script(addr: &str) -> Result<Script> {
@@ -148,6 +147,55 @@ impl ScriptDisplayFormat {
 }
 
 #[derive(Copy, Clone)]
+pub enum NftCapability {
+    Immutable,
+    Mutable,
+    Minting,
+}
+
+impl NftCapability {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            Self::Immutable => "immutable",
+            Self::Mutable => "mutable",
+            Self::Minting => "minting",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "immutable" => Some(Self::Immutable),
+            "mutable" => Some(Self::Mutable),
+            "minting" => Some(Self::Minting),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum NftCommitmentFormat {
+    Hex,
+    Plaintext,
+}
+
+impl NftCommitmentFormat {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            Self::Hex => "hex",
+            Self::Plaintext => "plaintext",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "hex" => Some(Self::Hex),
+            "plaintext" => Some(Self::Plaintext),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
 pub struct TxOutputState {
     pub value: RwSignal<u64>,
     pub script_pubkey: RwSignal<ScriptPubkeyData>,
@@ -190,8 +238,13 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
     let (script_format, set_script_format) = tx_output.script_display_format.split();
     let (script_pubkey_enabled, set_script_pubkey_enabled) = create_signal(true);
     let (script_pubkey_error, set_script_pubkey_error) = create_signal(false);
+    let cashtoken_enabled = RwSignal::new(false);
+    let has_amount = RwSignal::new(false);
+    let has_nft = RwSignal::new(false);
 
     let parsed_input_val_id = format!("tx-output-val-{}", tx_output.key);
+    let parsed_input_ft_id = format!("tx-output-ft-{}", tx_output.key);
+    let input_category_id = format!("tx-output-cat-{}", tx_output.key);
 
     let render_script_pubkey = move || {
         let script_pubkey = script_pubkey();
@@ -260,6 +313,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
     };
 
     view! {
+        // Address
         <div class="mb-1 flex">
             <textarea
                 spellcheck="false"
@@ -279,7 +333,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                 placeholder=move || {
                     match script_format() {
                         ScriptDisplayFormat::Addr => "Address",
-                        _ => "Locking Script Hex",
+                        ScriptDisplayFormat::Hex | ScriptDisplayFormat::Asm => "Locking Script Hex",
                     }
                 }
                 prop:value=render_script_pubkey
@@ -300,9 +354,123 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                 </select>
             </div>
         </div>
+
+        // Amount
         <div class="my-1">
             <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
             <ParsedInput id=parsed_input_val_id value=tx_output.value placeholder="Sats" class="w-52"/>
+            <label>
+                <input
+                    type="checkbox"
+                    class="ml-5"
+                    on:change=move |e| cashtoken_enabled.set(event_target_checked(&e))
+                    prop:checked=cashtoken_enabled
+                />
+                CashToken
+            </label>
+        </div>
+
+        // CashToken category
+        <div class="mt-3 mb-1 flex" class=("hidden", move || !cashtoken_enabled())>
+            <label for=input_category_id.clone() class="mr-1">Category:</label>
+            <input
+                id=input_category_id
+                on:change=move |e| { let _ = e; }
+                class=concat!(
+                    "border border-solid rounded border-stone-600 px-1 bg-stone-900 ",
+                    "font-mono grow placeholder:text-stone-600",
+                )
+                placeholder="Category ID"
+                // prop:value=txid
+            />
+        </div>
+
+        // CashToken fungible amount
+        <div class="my-1 ml-1" class=("hidden", move || !cashtoken_enabled())>
+            <label>
+                <input
+                    type="checkbox"
+                    on:change=move |e| has_amount.set(event_target_checked(&e))
+                    prop:checked=has_amount
+                />
+                FT
+            </label>
+            <label class="mr-1" for=parsed_input_ft_id.clone()>Amount:</label>
+            <ParsedInput
+                id=parsed_input_ft_id
+                value=tx_output.value
+                class="w-52 disabled:opacity-30"
+                disabled=Signal::derive(move || !has_amount())
+            />
+        </div>
+
+        // CashToken NFT
+        <div class="my-1 ml-1 flex" class=("hidden", move || !cashtoken_enabled())>
+            <label class="whitespace-nowrap mr-1">
+                <input
+                    type="checkbox"
+                    on:change=move |e| has_nft.set(event_target_checked(&e))
+                    prop:checked=has_nft
+                />
+                NFT
+            </label>
+
+            // NFT Capability
+            <div class="grow">
+                <select
+                    class="bg-inherit border rounded p-1 disabled:opacity-30"
+                    disabled=move || !has_nft()
+                    // on:input=move |e| {
+                    //     set_script_format(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                    // }
+                    // prop:value={move || script_format().to_str()}
+                >
+                    <option value={|| NftCapability::Immutable.to_str()}>Immutable</option>
+                    <option value={|| NftCapability::Mutable.to_str()}>Mutable</option>
+                    <option value={|| NftCapability::Minting.to_str()}>Minting</option>
+                </select>
+
+                // NFT commitment
+                <div class="my-1 flex" class=("hidden", move || !cashtoken_enabled())>
+                    <textarea
+                        spellcheck="false"
+                        rows=1
+                        // on:change=move |e| {
+                        //     match script_format() {
+                        //         ScriptDisplayFormat::Hex => {
+                        //             set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e)));
+                        //         }
+                        //         ScriptDisplayFormat::Addr => {
+                        //             set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e)));
+                        //         }
+                        //         _ => unreachable!(),
+                        //     }
+                        // }
+                        class=concat!(
+                            "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
+                            "placeholder:text-stone-600 font-mono grow bg-stone-900 ",
+                            "disabled:opacity-30",
+                        )
+                        placeholder="Commitment"
+                        // prop:value=render_script_pubkey
+                        disabled=move || !has_nft()
+                        // class=("text-red-700", script_pubkey_error)
+                    />
+                    <div>
+                        <select
+                            class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
+                            disabled=move || !has_nft()
+                            // on:input=move |e| {
+                            //     set_script_format(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                            // }
+                            // prop:value={move || script_format().to_str()}
+                        >
+                            <option value={|| NftCommitmentFormat::Hex.to_str()}>Hex</option>
+                            <option value={|| NftCommitmentFormat::Plaintext.to_str()}>Plaintext</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
         </div>
     }
 }

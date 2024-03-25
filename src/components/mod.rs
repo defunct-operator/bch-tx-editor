@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
 use leptos::{
-    component, create_signal, event_target_value, view, IntoProperty, IntoView, Oco, ReadSignal,
-    RwSignal,
+    component, create_signal, event_target_value, view, IntoProperty, IntoView, MaybeProp, Oco, ReadSignal, RwSignal
 };
 
 pub mod tracker;
@@ -14,6 +13,7 @@ pub fn ParsedInput<T: FromStr + Clone + 'static, I: Into<Oco<'static, str>>>(
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = "")] class: &'static str,
     id: I,
+    #[prop(into, default=None::<bool>.into())] disabled: MaybeProp<bool>,
 ) -> impl IntoView
 where
     ReadSignal<T>: IntoProperty,
@@ -41,6 +41,7 @@ where
             class=("border-stone-600", parse_success)
             class=("border-red-700", move || !parse_success())
             placeholder=placeholder
+            disabled=disabled
             id=id
         />
     }
