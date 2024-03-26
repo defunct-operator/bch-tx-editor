@@ -1,6 +1,7 @@
 #![deny(rust_2018_idioms)]
 mod components;
 mod electrum_client;
+pub mod partially_signed;
 
 use std::time::Duration;
 
