@@ -5,6 +5,7 @@ use leptos::{
     ReadSignal, RwSignal,
 };
 
+pub mod token_data;
 pub mod tracker;
 pub mod tx_output;
 
