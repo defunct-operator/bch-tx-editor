@@ -7,8 +7,7 @@ use bitcoincash::{
     TokenID,
 };
 use leptos::{
-    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Signal,
-    SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith,
+    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show, Signal, SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith, StoredValue
 };
 
 use crate::components::ParsedInput;
@@ -104,14 +103,25 @@ impl TokenDataState {
     }
 
     pub fn dispose(self) {
-        self.cashtoken_enabled.dispose();
-        self.category_id.dispose();
-        self.has_ft_amount.dispose();
-        self.ft_amount.dispose();
-        self.has_nft.dispose();
-        self.nft_capability.dispose();
-        self.nft_commitment_hex.dispose();
-        self.nft_commitment_format.dispose();
+        let Self {
+            cashtoken_enabled,
+            category_id,
+            has_ft_amount,
+            ft_amount,
+            has_nft,
+            nft_capability,
+            nft_commitment_hex,
+            nft_commitment_format,
+            key: _,
+        } = self;
+        cashtoken_enabled.dispose();
+        category_id.dispose();
+        has_ft_amount.dispose();
+        ft_amount.dispose();
+        has_nft.dispose();
+        nft_capability.dispose();
+        nft_commitment_hex.dispose();
+        nft_commitment_format.dispose();
     }
 
     pub fn token_data(self) -> Result<Option<OutputData>> {
@@ -216,153 +226,155 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
     let nft_commitment_error = RwSignal::new(false);
     let nft_commitment_lossy = RwSignal::new(false);
 
-    let parsed_input_ft_id = format!("tx-output-ft-{}", token_data.key);
-    let input_category_id = format!("tx-output-cat-{}", token_data.key);
+    let parsed_input_ft_id = StoredValue::new(format!("tx-output-ft-{}", token_data.key));
+    let input_category_id = StoredValue::new(format!("tx-output-cat-{}", token_data.key));
 
     view! {
-        // CashToken category
-        <div class="mt-3 mb-1 flex" class=("hidden", move || !cashtoken_enabled())>
-            <label for=input_category_id.clone() class="mr-1">Category:</label>
-            <input
-                id=input_category_id
-                on:change=move |e| token_data.category_id.set(event_target_value(&e))
-                class=concat!(
-                    "border border-solid rounded border-stone-600 px-1 bg-stone-900 ",
-                    "font-mono grow placeholder:text-stone-600",
-                )
-                prop:value=token_data.category_id
-                placeholder="Category ID"
-            />
-        </div>
-
-        // CashToken fungible amount
-        <div class="my-1 ml-1" class=("hidden", move || !cashtoken_enabled())>
-            <label>
+        <Show when=cashtoken_enabled>
+            // CashToken category
+            <div class="mt-3 mb-1 flex">
+                <label for=input_category_id class="mr-1">Category:</label>
                 <input
-                    type="checkbox"
-                    on:change=move |e| has_ft_amount.set(event_target_checked(&e))
-                    prop:checked=has_ft_amount
+                    id=input_category_id
+                    on:change=move |e| token_data.category_id.set(event_target_value(&e))
+                    class=concat!(
+                        "border border-solid rounded border-stone-600 px-1 bg-stone-900 ",
+                        "font-mono grow placeholder:text-stone-600",
+                    )
+                    prop:value=token_data.category_id
+                    placeholder="Category ID"
                 />
-                FT
-            </label>
-            <label
-                class="mr-1"
-                class=("opacity-30", move || !has_ft_amount())
-                for=parsed_input_ft_id.clone()
-            >
-                Amount:
-            </label>
-            <ParsedInput
-                id=parsed_input_ft_id
-                value=token_data.ft_amount
-                class="w-52 disabled:opacity-30"
-                disabled=Signal::derive(move || !has_ft_amount())
-            />
-        </div>
+            </div>
 
-        // CashToken NFT
-        <div class="my-1 ml-1 flex" class=("hidden", move || !cashtoken_enabled())>
-            <label class="whitespace-nowrap mr-1">
-                <input
-                    type="checkbox"
-                    on:change=move |e| has_nft.set(event_target_checked(&e))
-                    prop:checked=has_nft
-                />
-                NFT
-            </label>
-
-            // NFT Capability
-            <div class="grow">
-                <select
-                    class="bg-inherit border rounded p-1 disabled:opacity-30"
-                    disabled=move || !has_nft()
-                    on:input=move |e| {
-                        nft_capability.set(
-                            NftCapability::from_str(&event_target_value(&e)).unwrap()
-                        )
-                    }
-                    prop:value={move || nft_capability().to_str()}
+            // CashToken fungible amount
+            <div class="my-1 ml-1">
+                <label>
+                    <input
+                        type="checkbox"
+                        on:change=move |e| has_ft_amount.set(event_target_checked(&e))
+                        prop:checked=has_ft_amount
+                    />
+                    FT
+                </label>
+                <label
+                    class="mr-1"
+                    class=("opacity-30", move || !has_ft_amount())
+                    for=parsed_input_ft_id
                 >
-                    <option value={|| NftCapability::Immutable.to_str()}>Immutable</option>
-                    <option value={|| NftCapability::Mutable.to_str()}>Mutable</option>
-                    <option value={|| NftCapability::Minting.to_str()}>Minting</option>
-                </select>
+                    Amount:
+                </label>
+                <ParsedInput
+                    id=parsed_input_ft_id
+                    value=token_data.ft_amount
+                    class="w-52 disabled:opacity-30"
+                    disabled=Signal::derive(move || !has_ft_amount())
+                />
+            </div>
 
-                // NFT commitment
-                <div class="my-1 flex" class=("hidden", move || !cashtoken_enabled())>
-                    <textarea
-                        spellcheck="false"
-                        rows=1
-                        on:change=move |e| {
-                            match nft_commitment_format() {
-                                NftCommitmentFormat::Hex => {
-                                    nft_commitment_hex.set(event_target_value(&e));
-                                }
-                                NftCommitmentFormat::Plaintext => {
-                                    nft_commitment_hex.set(event_target_value(&e).as_bytes().to_hex());
+            // CashToken NFT
+            <div class="my-1 ml-1 flex">
+                <label class="whitespace-nowrap mr-1">
+                    <input
+                        type="checkbox"
+                        on:change=move |e| has_nft.set(event_target_checked(&e))
+                        prop:checked=has_nft
+                    />
+                    NFT
+                </label>
+
+                // NFT Capability
+                <div class="grow">
+                    <select
+                        class="bg-inherit border rounded p-1 disabled:opacity-30"
+                        disabled=move || !has_nft()
+                        on:input=move |e| {
+                            nft_capability.set(
+                                NftCapability::from_str(&event_target_value(&e)).unwrap()
+                            )
+                        }
+                        prop:value={move || nft_capability().to_str()}
+                    >
+                        <option value={|| NftCapability::Immutable.to_str()}>Immutable</option>
+                        <option value={|| NftCapability::Mutable.to_str()}>Mutable</option>
+                        <option value={|| NftCapability::Minting.to_str()}>Minting</option>
+                    </select>
+
+                    // NFT commitment
+                    <div class="my-1 flex">
+                        <textarea
+                            spellcheck="false"
+                            rows=1
+                            on:change=move |e| {
+                                match nft_commitment_format() {
+                                    NftCommitmentFormat::Hex => {
+                                        nft_commitment_hex.set(event_target_value(&e));
+                                    }
+                                    NftCommitmentFormat::Plaintext => {
+                                        nft_commitment_hex.set(event_target_value(&e).as_bytes().to_hex());
+                                    }
                                 }
                             }
-                        }
-                        class=concat!(
-                            "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
-                            "placeholder:text-stone-600 font-mono grow bg-stone-900 ",
-                        )
-                        placeholder="Commitment"
-                        prop:value=move || {
-                            match nft_commitment_format() {
-                                NftCommitmentFormat::Hex => {
-                                    nft_commitment_error.set(false);
-                                    nft_commitment_lossy.set(false);
-                                    nft_commitment_hex()
-                                }
-                                NftCommitmentFormat::Plaintext => 'a: {
-                                    let bytes = match nft_commitment_hex.with(|h| Vec::from_hex(h)) {
-                                        Ok(b) => b,
-                                        Err(e) => {
-                                            nft_commitment_error.set(true);
-                                            nft_commitment_lossy.set(false);
-                                            break 'a e.to_string();
-                                        }
-                                    };
-                                    nft_commitment_error.set(false);
-                                    let text = String::from_utf8_lossy(&bytes);
-                                    match text {
-                                        Cow::Borrowed(s) => {
-                                            nft_commitment_lossy.set(false);
-                                            s.into()
-                                        }
-                                        Cow::Owned(s) => {
-                                            nft_commitment_lossy.set(true);
-                                            s
+                            class=concat!(
+                                "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
+                                "placeholder:text-stone-600 font-mono grow bg-stone-900 ",
+                            )
+                            placeholder="Commitment"
+                            prop:value=move || {
+                                match nft_commitment_format() {
+                                    NftCommitmentFormat::Hex => {
+                                        nft_commitment_error.set(false);
+                                        nft_commitment_lossy.set(false);
+                                        nft_commitment_hex()
+                                    }
+                                    NftCommitmentFormat::Plaintext => 'a: {
+                                        let bytes = match nft_commitment_hex.with(|h| Vec::from_hex(h)) {
+                                            Ok(b) => b,
+                                            Err(e) => {
+                                                nft_commitment_error.set(true);
+                                                nft_commitment_lossy.set(false);
+                                                break 'a e.to_string();
+                                            }
+                                        };
+                                        nft_commitment_error.set(false);
+                                        let text = String::from_utf8_lossy(&bytes);
+                                        match text {
+                                            Cow::Borrowed(s) => {
+                                                nft_commitment_lossy.set(false);
+                                                s.into()
+                                            }
+                                            Cow::Owned(s) => {
+                                                nft_commitment_lossy.set(true);
+                                                s
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        disabled=move || !has_nft()
-                            || nft_commitment_error()
-                            || nft_commitment_lossy()
-                        class=("text-red-700", nft_commitment_error)
-                        class=("text-yellow-700", nft_commitment_lossy)
-                        class=("opacity-30", move || !has_nft())
-                    />
-                    <div>
-                        <select
-                            class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
                             disabled=move || !has_nft()
-                            on:input=move |e| {
-                                nft_commitment_format.set(
-                                    NftCommitmentFormat::from_str(&event_target_value(&e)).unwrap()
-                                )
-                            }
-                            prop:value={move || nft_commitment_format().to_str()}
-                        >
-                            <option value={|| NftCommitmentFormat::Hex.to_str()}>Hex</option>
-                            <option value={|| NftCommitmentFormat::Plaintext.to_str()}>Plaintext</option>
-                        </select>
+                                || nft_commitment_error()
+                                || nft_commitment_lossy()
+                            class=("text-red-700", nft_commitment_error)
+                            class=("text-yellow-700", nft_commitment_lossy)
+                            class=("opacity-30", move || !has_nft())
+                        />
+                        <div>
+                            <select
+                                class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
+                                disabled=move || !has_nft()
+                                on:input=move |e| {
+                                    nft_commitment_format.set(
+                                        NftCommitmentFormat::from_str(&event_target_value(&e)).unwrap()
+                                    )
+                                }
+                                prop:value={move || nft_commitment_format().to_str()}
+                            >
+                                <option value={|| NftCommitmentFormat::Hex.to_str()}>Hex</option>
+                                <option value={|| NftCommitmentFormat::Plaintext.to_str()}>Plaintext</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </Show>
     }
 }

@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
 use leptos::{
-    component, create_signal, event_target_value, view, IntoProperty, IntoView, MaybeProp, Oco,
-    ReadSignal, RwSignal,
+    component, create_signal, event_target_value, view, IntoAttribute, IntoProperty, IntoView, MaybeProp, ReadSignal, RwSignal
 };
 
 pub mod token_data;
@@ -10,7 +9,7 @@ pub mod tracker;
 pub mod tx_output;
 
 #[component]
-pub fn ParsedInput<T: FromStr + Clone + 'static, I: Into<Oco<'static, str>>>(
+pub fn ParsedInput<T: FromStr + Clone + 'static, I: IntoAttribute>(
     value: RwSignal<T>,
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = "")] class: &'static str,
@@ -20,7 +19,6 @@ pub fn ParsedInput<T: FromStr + Clone + 'static, I: Into<Oco<'static, str>>>(
 where
     ReadSignal<T>: IntoProperty,
 {
-    let id = id.into();
     let (parse_success, set_parse_success) = create_signal(true);
     let (thevalue, set_value) = value.split();
 
