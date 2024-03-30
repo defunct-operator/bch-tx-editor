@@ -1,3 +1,6 @@
+use super::token_data::TokenDataState;
+use crate::{components::{token_data::TokenData, ParsedInput}, util::is_p2sh32};
+
 use anyhow::Result;
 use bitcoincash::{
     blockdata::{opcodes, script::Builder},
@@ -48,14 +51,6 @@ fn cash_addr_to_script(addr: &str) -> Result<Script> {
     }
 }
 
-fn is_p2sh32(s: &Script) -> bool {
-    let s = s.as_bytes();
-    s.len() == 35
-        && s[0] == opcodes::all::OP_HASH256.to_u8()
-        && s[1] == opcodes::all::OP_PUSHBYTES_32.to_u8()
-        && s[34] == opcodes::all::OP_EQUAL.to_u8()
-}
-
 fn script_to_cash_addr(s: &Script, network: Network) -> Result<String> {
     let prefix = match network {
         Network::Bitcoin => "bitcoincash",
@@ -75,9 +70,6 @@ fn script_to_cash_addr(s: &Script, network: Network) -> Result<String> {
         anyhow::bail!("Unknown script type");
     }
 }
-
-use super::token_data::TokenDataState;
-use crate::components::{token_data::TokenData, ParsedInput};
 
 #[derive(Clone)]
 pub enum ScriptPubkeyData {

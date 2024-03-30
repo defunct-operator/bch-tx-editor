@@ -2,10 +2,12 @@
 mod components;
 mod electrum_client;
 pub mod partially_signed;
+pub mod util;
 
 use std::time::Duration;
 
 use anyhow::Result;
+use bitcoincash::consensus::encode;
 use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::hashes::{self, sha256};
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
@@ -23,6 +25,7 @@ use leptos::{
 
 use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
 use crate::electrum_client::ElectrumClient;
+use crate::partially_signed::PartiallySignedTransaction;
 
 fn main() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -227,7 +230,7 @@ fn App() -> impl IntoView {
     };
     let deserialize_tx = move || -> Result<()> {
         let hex = tx_hex.with(|t| Vec::from_hex(t))?;
-        let tx = Transaction::deserialize(&hex)?;
+        let tx = PartiallySignedTransaction::deserialize(&hex).or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
 
         let mut current_input_len = 0;
         set_tx_inputs.update(|tx_inputs| {
@@ -262,10 +265,10 @@ fn App() -> impl IntoView {
             for (i, input) in tx.input.iter().enumerate() {
                 tx_inputs[i]
                     .txid
-                    .set(input.previous_output.txid.to_string());
-                tx_inputs[i].vout.set(input.previous_output.vout);
-                tx_inputs[i].script_sig.set(input.script_sig.to_hex());
-                tx_inputs[i].sequence.set(input.sequence.0);
+                    .set(input.previous_output().txid.to_string());
+                tx_inputs[i].vout.set(input.previous_output().vout);
+                tx_inputs[i].script_sig.set(input.script_sig().unwrap().to_hex());
+                tx_inputs[i].sequence.set(input.sequence().0);
             }
         });
 

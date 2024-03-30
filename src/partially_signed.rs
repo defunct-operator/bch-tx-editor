@@ -1,14 +1,12 @@
 use bitcoincash::{
     blockdata::{
-        opcodes::all::OP_SPECIAL_TOKEN_PREFIX,
+        opcodes::{all::{OP_CHECKMULTISIG, OP_PUSHBYTES_0, OP_SPECIAL_TOKEN_PREFIX}, Class, ClassifyContext},
         script::{self, Instruction},
         token::OutputData,
-    },
-    consensus::{
+    }, consensus::{
         encode::{self, MAX_VEC_SIZE},
         Decodable, Encodable,
-    },
-    OutPoint, PackedLockTime, Script, Sequence, TxIn, TxOut, VarInt,
+    }, psbt::serialize::{Deserialize, Serialize}, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -68,17 +66,65 @@ impl UnsignedScriptSig {
     }
 }
 
+fn is_unsigned_p2pkh_payload(s: &[u8]) -> bool {
+    match s {
+        [0xfd, spk @ ..] => Script::from(spk.to_vec()).is_p2pkh(),
+        [0x02 | 0x03 | 0x04 | 0xfe | 0xff, ..] => true, // TODO
+        _ => false,
+    }
+}
+
+fn is_multisig(script: &[u8], num_sigs: usize) -> bool {
+    let script = Script::from(script.to_vec());
+    let Ok(instructions): Result<Vec<_>, _> = script.instructions().collect() else {
+        return false;
+    };
+    // Electron Cash only seems to recognize m and n up to 16
+    let [Instruction::Op(m), pubkeys @ .., Instruction::Op(n), checkmultisig] =
+        &instructions[..]
+    else {
+        return false;
+    };
+    let Class::PushNum(m) = m.classify(ClassifyContext::Legacy) else { return false };
+    let Class::PushNum(n) = n.classify(ClassifyContext::Legacy) else { return false };
+    let Ok(m) = usize::try_from(m) else { return false };
+    let Ok(n) = usize::try_from(n) else { return false };
+
+    *checkmultisig == Instruction::Op(OP_CHECKMULTISIG) &&
+    m == num_sigs &&
+    n == pubkeys.len()
+}
+
 fn is_unsigned_script_sig(s: &Script) -> bool {
-    matches!(
-        s.instructions().next(),
-        Some(Ok(Instruction::PushBytes(&[0xff])))
-    )
+    let mut ins = s.instructions();
+    match ins.next() {
+        // Possibly p2pkh, could also be a p2sh contract, the format is ambiguous so its actually
+        // impossible to tell.
+        Some(Ok(Instruction::PushBytes(&[0xff]))) => match ins.next() {
+            Some(Ok(Instruction::PushBytes(payload))) => is_unsigned_p2pkh_payload(payload),
+            _ => false,
+        }
+        // Possibly multisig
+        Some(Ok(Instruction::Op(OP_PUSHBYTES_0))) => {
+            let mut num_pushes = 0;
+            let mut last = None;
+            for x in ins {
+                match x {
+                    Ok(Instruction::PushBytes(b)) => { num_pushes += 1; last = Some(b); }
+                    _ => return false,
+                }
+            }
+            let Some(last) = last else { return false };
+            is_multisig(last, num_pushes - 1)
+        }
+        _ => false,
+    }
 }
 
 /// Unsigned transaction input. Compatible with Electron Cash.
 ///
 /// This only implements the 0xFD public key, so it only contains the script pubkey of the previous
-/// transaction's output.
+/// transaction's output, not the actual public key.
 ///
 /// * [Electrum documentation](https://electrum.readthedocs.io/en/latest/transactions.html)
 /// * [Electron Cash source 1](https://github.com/Electron-Cash/Electron-Cash/blob/8e966d3c53fc1c394054a273ca2dc2be578b0abf/electroncash/keystore.py#L698)
@@ -168,6 +214,43 @@ impl Decodable for UnsignedTxIn {
 pub enum MaybeUnsignedTxIn {
     Unsigned(UnsignedTxIn),
     Signed(TxIn),
+}
+
+impl MaybeUnsignedTxIn {
+    pub fn previous_output(&self) -> &OutPoint {
+        match self {
+            Self::Unsigned(t) => &t.previous_output,
+            Self::Signed(t) => &t.previous_output,
+        }
+    }
+
+    pub fn previous_output_mut(&mut self) -> &mut OutPoint {
+        match self {
+            Self::Unsigned(t) => &mut t.previous_output,
+            Self::Signed(t) => &mut t.previous_output,
+        }
+    }
+
+    pub fn sequence(&self) -> Sequence {
+        match self {
+            Self::Unsigned(t) => t.sequence,
+            Self::Signed(t) => t.sequence,
+        }
+    }
+
+    pub fn sequence_mut(&mut self) -> &mut Sequence {
+        match self {
+            Self::Unsigned(t) => &mut t.sequence,
+            Self::Signed(t) => &mut t.sequence,
+        }
+    }
+
+    pub fn script_sig(&self) -> Option<&Script> {
+        match self {
+            Self::Unsigned(_) => None,
+            Self::Signed(t) => Some(&t.script_sig),
+        }
+    }
 }
 
 impl Encodable for MaybeUnsignedTxIn {
@@ -322,6 +405,29 @@ impl Decodable for PartiallySignedTransaction {
             output: Decodable::consensus_decode_from_finite_reader(r)?,
             lock_time: Decodable::consensus_decode_from_finite_reader(r)?,
         })
+    }
+}
+
+impl From<Transaction> for PartiallySignedTransaction {
+    fn from(t: Transaction) -> Self {
+        Self {
+            version: t.version,
+            lock_time: t.lock_time,
+            input: t.input.into_iter().map(MaybeUnsignedTxIn::Signed).collect(),
+            output: t.output,
+        }
+    }
+}
+
+impl Deserialize for PartiallySignedTransaction {
+    fn deserialize(bytes: &[u8]) -> Result<Self, encode::Error> {
+        bitcoincash::consensus::deserialize(bytes)
+    }
+}
+
+impl Serialize for PartiallySignedTransaction {
+    fn serialize(&self) -> Vec<u8> {
+        bitcoincash::consensus::serialize(self)
     }
 }
 
