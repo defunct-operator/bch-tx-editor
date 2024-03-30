@@ -6,6 +6,7 @@ use leptos::{
 
 pub mod token_data;
 pub mod tracker;
+pub mod tx_input;
 pub mod tx_output;
 
 #[component]
