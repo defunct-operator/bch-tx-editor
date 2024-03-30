@@ -19,8 +19,7 @@ use futures::future::FutureExt;
 use futures::StreamExt;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, logging::log, mount_to_body,
-    on_cleanup, view, For, IntoView, SignalGet, SignalSet, SignalUpdate,
-    SignalWith,
+    on_cleanup, view, For, IntoView, SignalGet, SignalSet, SignalUpdate, SignalWith,
 };
 
 use crate::components::tx_input::{TxInput, TxInputState};
@@ -104,7 +103,8 @@ fn App() -> impl IntoView {
     };
     let deserialize_tx = move || -> Result<()> {
         let hex = tx_hex.with(|t| Vec::from_hex(t))?;
-        let tx = PartiallySignedTransaction::deserialize(&hex).or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
+        let tx = PartiallySignedTransaction::deserialize(&hex)
+            .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
 
         let mut current_input_len = 0;
         set_tx_inputs.update(|tx_inputs| {
@@ -141,7 +141,9 @@ fn App() -> impl IntoView {
                     .txid
                     .set(input.previous_output().txid.to_string());
                 tx_inputs[i].vout.set(input.previous_output().vout);
-                tx_inputs[i].script_sig.set(input.script_sig().unwrap().to_hex());
+                tx_inputs[i]
+                    .script_sig
+                    .set(input.script_sig().unwrap().to_hex());
                 tx_inputs[i].sequence.set(input.sequence().0);
             }
         });

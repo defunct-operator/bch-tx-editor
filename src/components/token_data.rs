@@ -7,7 +7,8 @@ use bitcoincash::{
     TokenID,
 };
 use leptos::{
-    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show, Signal, SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith, StoredValue
+    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show, Signal,
+    SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith, StoredValue,
 };
 
 use crate::components::ParsedInput;

@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use leptos::{
-    component, create_signal, event_target_value, view, IntoAttribute, IntoProperty, IntoView, MaybeProp, ReadSignal, RwSignal
+    component, create_signal, event_target_value, view, IntoAttribute, IntoProperty, IntoView,
+    MaybeProp, ReadSignal, RwSignal,
 };
 
 pub mod token_data;

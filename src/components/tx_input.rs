@@ -1,12 +1,13 @@
+use anyhow::Result;
 use bitcoincash::hashes::hex::FromHex;
 use bitcoincash::{hashes, OutPoint, Script, Sequence, TxIn};
-use leptos::{component, create_signal, event_target_checked, event_target_value, view, IntoView, RwSignal, SignalDispose, SignalGet, SignalSet};
-
-use crate::components::{token_data::TokenData, ParsedInput};
+use leptos::{
+    component, create_signal, event_target_checked, event_target_value, view, IntoView, RwSignal,
+    SignalDispose, SignalGet, SignalSet,
+};
 
 use super::token_data::TokenDataState;
-use anyhow::Result;
-
+use crate::components::{token_data::TokenData, ParsedInput};
 
 #[derive(Copy, Clone)]
 pub struct TxInputState {
@@ -33,7 +34,15 @@ impl TxInputState {
     }
 
     pub fn dispose(self) {
-        let Self { txid, vout, sequence, script_sig, unsigned, token_data_state, key: _ } = self;
+        let Self {
+            txid,
+            vout,
+            sequence,
+            script_sig,
+            unsigned,
+            token_data_state,
+            key: _,
+        } = self;
         txid.dispose();
         vout.dispose();
         sequence.dispose();

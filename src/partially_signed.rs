@@ -1,12 +1,18 @@
 use bitcoincash::{
     blockdata::{
-        opcodes::{all::{OP_CHECKMULTISIG, OP_PUSHBYTES_0, OP_SPECIAL_TOKEN_PREFIX}, Class, ClassifyContext},
+        opcodes::{
+            all::{OP_CHECKMULTISIG, OP_PUSHBYTES_0, OP_SPECIAL_TOKEN_PREFIX},
+            Class, ClassifyContext,
+        },
         script::{self, Instruction},
         token::OutputData,
-    }, consensus::{
+    },
+    consensus::{
         encode::{self, MAX_VEC_SIZE},
         Decodable, Encodable,
-    }, psbt::serialize::{Deserialize, Serialize}, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt
+    },
+    psbt::serialize::{Deserialize, Serialize},
+    OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt,
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -80,19 +86,24 @@ fn is_multisig(script: &[u8], num_sigs: usize) -> bool {
         return false;
     };
     // Electron Cash only seems to recognize m and n up to 16
-    let [Instruction::Op(m), pubkeys @ .., Instruction::Op(n), checkmultisig] =
-        &instructions[..]
+    let [Instruction::Op(m), pubkeys @ .., Instruction::Op(n), checkmultisig] = &instructions[..]
     else {
         return false;
     };
-    let Class::PushNum(m) = m.classify(ClassifyContext::Legacy) else { return false };
-    let Class::PushNum(n) = n.classify(ClassifyContext::Legacy) else { return false };
-    let Ok(m) = usize::try_from(m) else { return false };
-    let Ok(n) = usize::try_from(n) else { return false };
+    let Class::PushNum(m) = m.classify(ClassifyContext::Legacy) else {
+        return false;
+    };
+    let Class::PushNum(n) = n.classify(ClassifyContext::Legacy) else {
+        return false;
+    };
+    let Ok(m) = usize::try_from(m) else {
+        return false;
+    };
+    let Ok(n) = usize::try_from(n) else {
+        return false;
+    };
 
-    *checkmultisig == Instruction::Op(OP_CHECKMULTISIG) &&
-    m == num_sigs &&
-    n == pubkeys.len()
+    *checkmultisig == Instruction::Op(OP_CHECKMULTISIG) && m == num_sigs && n == pubkeys.len()
 }
 
 fn is_unsigned_script_sig(s: &Script) -> bool {
@@ -103,14 +114,17 @@ fn is_unsigned_script_sig(s: &Script) -> bool {
         Some(Ok(Instruction::PushBytes(&[0xff]))) => match ins.next() {
             Some(Ok(Instruction::PushBytes(payload))) => is_unsigned_p2pkh_payload(payload),
             _ => false,
-        }
+        },
         // Possibly multisig
         Some(Ok(Instruction::Op(OP_PUSHBYTES_0))) => {
             let mut num_pushes = 0;
             let mut last = None;
             for x in ins {
                 match x {
-                    Ok(Instruction::PushBytes(b)) => { num_pushes += 1; last = Some(b); }
+                    Ok(Instruction::PushBytes(b)) => {
+                        num_pushes += 1;
+                        last = Some(b);
+                    }
                     _ => return false,
                 }
             }

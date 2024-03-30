@@ -1,6 +1,3 @@
-use super::token_data::TokenDataState;
-use crate::{components::{token_data::TokenData, ParsedInput}, util::is_p2sh32};
-
 use anyhow::Result;
 use bitcoincash::{
     blockdata::{opcodes, script::Builder},
@@ -11,6 +8,12 @@ use cashaddr::CashEnc;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_checked, event_target_value, view,
     IntoView, RwSignal, SignalDispose, SignalGet, SignalSet,
+};
+
+use super::token_data::TokenDataState;
+use crate::{
+    components::{token_data::TokenData, ParsedInput},
+    util::is_p2sh32,
 };
 
 fn cash_addr_to_script(addr: &str) -> Result<Script> {
