@@ -117,29 +117,12 @@ impl TryFrom<ScriptPubkeyData> for Script {
     }
 }
 
-#[derive(Copy, Clone)]
-pub enum ScriptDisplayFormat {
-    Addr,
-    Asm,
-    Hex,
-}
-
-impl ScriptDisplayFormat {
-    pub fn to_str(self) -> &'static str {
-        match self {
-            Self::Addr => "addr",
-            Self::Asm => "asm",
-            Self::Hex => "hex",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "addr" => Some(Self::Addr),
-            "asm" => Some(Self::Asm),
-            "hex" => Some(Self::Hex),
-            _ => None,
-        }
+str_enum! {
+    #[derive(Copy, Clone)]
+    pub enum ScriptDisplayFormat {
+        Addr = "addr",
+        Asm = "asm",
+        Hex = "hex",
     }
 }
 

@@ -1,4 +1,6 @@
 #![deny(rust_2018_idioms)]
+#[macro_use]
+mod macros;
 mod components;
 mod electrum_client;
 pub mod partially_signed;

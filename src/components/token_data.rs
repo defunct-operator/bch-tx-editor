@@ -13,30 +13,13 @@ use leptos::{
 
 use crate::components::ParsedInput;
 
-#[derive(Copy, Clone, Default)]
-pub enum NftCapability {
-    #[default]
-    Immutable,
-    Mutable,
-    Minting,
-}
-
-impl NftCapability {
-    pub fn to_str(self) -> &'static str {
-        match self {
-            Self::Immutable => "immutable",
-            Self::Mutable => "mutable",
-            Self::Minting => "minting",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "immutable" => Some(Self::Immutable),
-            "mutable" => Some(Self::Mutable),
-            "minting" => Some(Self::Minting),
-            _ => None,
-        }
+str_enum! {
+    #[derive(Copy, Clone, Default)]
+    pub enum NftCapability {
+        #[default]
+        Immutable = "immutable",
+        Mutable = "mutable",
+        Minting = "minting",
     }
 }
 
@@ -51,27 +34,12 @@ impl From<NftCapability> for Capability {
     }
 }
 
-#[derive(Copy, Clone, Default, PartialEq, Eq)]
-pub enum NftCommitmentFormat {
-    #[default]
-    Hex,
-    Plaintext,
-}
-
-impl NftCommitmentFormat {
-    pub fn to_str(self) -> &'static str {
-        match self {
-            Self::Hex => "hex",
-            Self::Plaintext => "plaintext",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "hex" => Some(Self::Hex),
-            "plaintext" => Some(Self::Plaintext),
-            _ => None,
-        }
+str_enum! {
+    #[derive(Copy, Clone, Default, PartialEq, Eq)]
+    pub enum NftCommitmentFormat {
+        #[default]
+        Hex = "hex",
+        Plaintext = "plaintext",
     }
 }
 
