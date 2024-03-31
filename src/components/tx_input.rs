@@ -2,8 +2,8 @@ use anyhow::Result;
 use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::{hashes, Network, OutPoint, Script, Sequence, TxIn};
 use leptos::{
-    component, create_signal, event_target_checked, event_target_value, view, IntoView, RwSignal,
-    Show, SignalDispose, SignalGet, SignalSet, SignalUpdate, StoredValue,
+    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show,
+    SignalDispose, SignalGet, SignalSet, SignalUpdate, StoredValue,
 };
 
 use super::token_data::TokenDataState;
@@ -197,11 +197,11 @@ impl TryFrom<TxInputState> for MaybeUnsignedTxIn {
 
 #[component]
 pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
-    let (txid, set_txid) = tx_input.txid.split();
-    let (script_sig, set_script_sig) = tx_input.script_sig.split();
-    let (script_format, set_script_format) = create_signal(String::from("hex"));
-    let (script_enabled, set_script_enabled) = create_signal(true);
-    let (script_error, set_script_error) = create_signal(false);
+    let txid = tx_input.txid;
+    let script_sig = tx_input.script_sig;
+    let script_format = RwSignal::new(String::from("hex"));
+    let script_enabled = RwSignal::new(true);
+    let script_error = RwSignal::new(false);
     let cashtoken_enabled = tx_input.token_data_state.cashtoken_enabled;
     let unsigned = tx_input.unsigned;
     let utxo_pubkey = tx_input.utxo_pubkey;
@@ -216,11 +216,11 @@ pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
     let try_render_script = move || -> Result<String> {
         match &*script_format() {
             "hex" => {
-                set_script_enabled(true);
+                script_enabled.set(true);
                 Ok(script_sig())
             }
             "asm" => {
-                set_script_enabled(false);
+                script_enabled.set(false);
                 let mut s = script_sig();
                 s.retain(|c| !c.is_ascii_whitespace());
                 let s = Script::from_hex(&s)?;
@@ -231,11 +231,11 @@ pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
     };
     let render_script = move || match try_render_script() {
         Ok(s) => {
-            set_script_error(false);
+            script_error.set(false);
             s
         }
         Err(e) => {
-            set_script_error(true);
+            script_error.set(true);
             e.to_string()
         }
     };
@@ -314,7 +314,7 @@ pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
     view! {
         <div class="mb-1 flex">
             <input
-                on:change=move |e| set_txid(event_target_value(&e))
+                on:change=move |e| txid.set(event_target_value(&e))
                 class=concat!(
                     "border border-solid rounded border-stone-600 px-1 w-full bg-stone-900 ",
                     "placeholder:text-stone-600 font-mono grow",
@@ -328,7 +328,7 @@ pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
         <div class="mb-1 flex">
             <textarea
                 spellcheck="false"
-                on:change=move |e| set_script_sig(event_target_value(&e))
+                on:change=move |e| script_sig.set(event_target_value(&e))
                 class=concat!(
                     "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
                     "placeholder:text-stone-600 font-mono bg-stone-900 grow",
@@ -342,7 +342,7 @@ pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
             <div>
                 <select
                     class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
-                    on:input=move |e| set_script_format(event_target_value(&e))
+                    on:input=move |e| script_format.set(event_target_value(&e))
                     prop:value={script_format}
                     disabled=unsigned
                 >

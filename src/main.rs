@@ -17,9 +17,10 @@ use bitcoincash::secp256k1::{rand, Message, Secp256k1};
 use bitcoincash::{KeyPair, PackedLockTime, Transaction};
 use components::tx_output::ScriptDisplayFormat;
 use components::ParsedInput;
+use leptos::RwSignal;
 use leptos::{
-    component, create_rw_signal, create_signal, event_target_value, logging::log, mount_to_body,
-    view, For, IntoView, SignalGet, SignalSet, SignalUpdate, SignalWith,
+    component, event_target_value, logging::log, mount_to_body, view, For, IntoView, SignalGet,
+    SignalSet, SignalUpdate, SignalWith,
 };
 
 use crate::components::tx_input::{TxInput, TxInputState};
@@ -33,27 +34,27 @@ fn main() {
 
 #[component]
 fn App() -> impl IntoView {
-    let (tx_inputs, set_tx_inputs) = create_signal(vec![TxInputState::new(0)]);
-    let (tx_outputs, set_tx_outputs) = create_signal(vec![TxOutputState::new(0)]);
-    let tx_version_rw = create_rw_signal(2i32);
-    let tx_locktime_rw = create_rw_signal(0u32);
-    let (tx_hex, set_tx_hex) = create_signal(String::new());
-    let (tx_hex_errored, set_tx_hex_errored) = create_signal(false);
-    let (tx_input_id, set_tx_input_id) = create_signal(1);
-    let (tx_output_id, set_tx_output_id) = create_signal(1);
+    let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
+    let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
+    let tx_version_rw = RwSignal::new(2i32);
+    let tx_locktime_rw = RwSignal::new(0u32);
+    let tx_hex = RwSignal::new(String::new());
+    let tx_hex_errored = RwSignal::new(false);
+    let tx_input_id = RwSignal::new(1);
+    let tx_output_id = RwSignal::new(1);
 
     let new_tx_input = move || {
         let id = tx_input_id();
-        set_tx_input_id(id + 1);
-        set_tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id)));
+        tx_input_id.set(id + 1);
+        tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id)));
     };
     let new_tx_output = move || {
         let id = tx_output_id();
-        set_tx_output_id(id + 1);
-        set_tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id)));
+        tx_output_id.set(id + 1);
+        tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id)));
     };
     let delete_tx_input = move |key_to_remove| {
-        set_tx_inputs.update(|tx_inputs| {
+        tx_inputs.update(|tx_inputs| {
             let index_to_remove = tx_inputs
                 .iter()
                 .enumerate()
@@ -65,7 +66,7 @@ fn App() -> impl IntoView {
         });
     };
     let delete_tx_output = move |key_to_remove| {
-        set_tx_outputs.update(|tx_outputs| {
+        tx_outputs.update(|tx_outputs| {
             let index_to_remove = tx_outputs
                 .iter()
                 .enumerate()
@@ -106,7 +107,7 @@ fn App() -> impl IntoView {
             .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
 
         let mut current_input_len = 0;
-        set_tx_inputs.update(|tx_inputs| {
+        tx_inputs.update(|tx_inputs| {
             if tx_inputs.len() > tx.input.len() {
                 for tx_input in tx_inputs.drain(tx.input.len()..) {
                     tx_input.dispose();
@@ -115,7 +116,7 @@ fn App() -> impl IntoView {
             current_input_len = tx_inputs.len();
         });
         let mut current_output_len = 0;
-        set_tx_outputs.update(|tx_outputs| {
+        tx_outputs.update(|tx_outputs| {
             if tx_outputs.len() > tx.output.len() {
                 for tx_output in tx_outputs.drain(tx.output.len()..) {
                     tx_output.dispose();
@@ -253,12 +254,12 @@ fn App() -> impl IntoView {
                 on:click=move |_| {
                     match serialize_tx() {
                         Ok(tx) => {
-                            set_tx_hex_errored(false);
-                            set_tx_hex(tx);
+                            tx_hex_errored.set(false);
+                            tx_hex.set(tx);
                         }
                         Err(e) => {
-                            set_tx_hex_errored(true);
-                            set_tx_hex(e.to_string());
+                            tx_hex_errored.set(true);
+                            tx_hex.set(e.to_string());
                         }
                     }
                 }
@@ -272,7 +273,7 @@ fn App() -> impl IntoView {
                         Ok(_) => (),
                         Err(e) => {
                             log!("Deserialization error: {e}");
-                            set_tx_hex_errored(true);
+                            tx_hex_errored.set(true);
                         }
                     }
                 }
@@ -284,8 +285,8 @@ fn App() -> impl IntoView {
                 class="border border-solid rounded border-stone-600 px-1 w-full placeholder:text-stone-600 font-mono grow my-1"
                 class=("bg-stone-900", move || !tx_hex_errored())
                 class=("bg-red-950", tx_hex_errored)
-                on:input=move |_| set_tx_hex_errored(false)
-                on:change=move |e| set_tx_hex(event_target_value(&e))
+                on:input=move |_| tx_hex_errored.set(false)
+                on:change=move |e| tx_hex.set(event_target_value(&e))
                 prop:value={tx_hex}
             />
         </div>
@@ -337,11 +338,11 @@ fn App() -> impl IntoView {
 
 #[component]
 fn AsyncCounter() -> impl IntoView {
-    let (count, set_count) = create_signal(0);
+    let count = RwSignal::new(0);
     let async_task = || async move {
         loop {
             gloo::timers::future::sleep(Duration::from_secs(1)).await;
-            set_count.update(|x| *x += 1);
+            count.update(|x| *x += 1);
         }
     };
     leptos::spawn_local(async_task());
@@ -354,7 +355,7 @@ fn SimpleWallet() -> impl IntoView {
     let mut rng = rand::thread_rng();
     let keypair = KeyPair::new(&secp, &mut rng);
 
-    let (value, set_value) = create_signal(String::new());
+    let value = RwSignal::new(String::new());
     let pubkey = keypair.public_key().to_string();
 
     view! {
@@ -362,7 +363,7 @@ fn SimpleWallet() -> impl IntoView {
         <p>
             "Message to sign: "
             <input
-                on:change=move |e| set_value(event_target_value(&e))
+                on:change=move |e| value.set(event_target_value(&e))
             />
         </p>
         <p>

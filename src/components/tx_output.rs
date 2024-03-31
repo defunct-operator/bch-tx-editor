@@ -1,8 +1,8 @@
 use anyhow::Result;
 use bitcoincash::{hashes::hex::ToHex, Network, Script, TxOut};
 use leptos::{
-    component, create_rw_signal, create_signal, event_target_checked, event_target_value, view,
-    IntoView, RwSignal, SignalDispose, SignalGet, SignalSet,
+    component, event_target_checked, event_target_value, view, IntoView, RwSignal, SignalDispose,
+    SignalGet, SignalSet,
 };
 
 use super::token_data::TokenDataState;
@@ -75,9 +75,9 @@ pub struct TxOutputState {
 impl TxOutputState {
     pub fn new(key: usize) -> Self {
         Self {
-            value: create_rw_signal(0),
-            script_pubkey: create_rw_signal(ScriptPubkeyData::Hex("".into())),
-            script_display_format: create_rw_signal(ScriptDisplayFormat::Addr),
+            value: RwSignal::new(0),
+            script_pubkey: RwSignal::new(ScriptPubkeyData::Hex("".into())),
+            script_display_format: RwSignal::new(ScriptDisplayFormat::Addr),
             token_data_state: TokenDataState::new(key),
             key,
         }
@@ -106,12 +106,12 @@ impl TryFrom<TxOutputState> for TxOut {
 
 #[component]
 pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
-    let (script_pubkey, set_script_pubkey) = tx_output.script_pubkey.split();
-    let (script_format, set_script_format) = tx_output.script_display_format.split();
+    let script_pubkey = tx_output.script_pubkey;
+    let script_format = tx_output.script_display_format;
     let cashtoken_enabled = tx_output.token_data_state.cashtoken_enabled;
 
-    let (script_pubkey_enabled, set_script_pubkey_enabled) = create_signal(true);
-    let (script_pubkey_error, set_script_pubkey_error) = create_signal(false);
+    let script_pubkey_enabled = RwSignal::new(true);
+    let script_pubkey_error = RwSignal::new(false);
 
     let parsed_input_val_id = format!("tx-output-val-{}", tx_output.key);
 
@@ -120,60 +120,60 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
         match script_format() {
             ScriptDisplayFormat::Hex => {
                 if script_pubkey.empty_or_hex() {
-                    set_script_pubkey_enabled(true);
-                    set_script_pubkey_error(false);
+                    script_pubkey_enabled.set(true);
+                    script_pubkey_error.set(false);
                     return script_pubkey.inner();
                 }
                 match Script::try_from(script_pubkey) {
                     Ok(s) => {
-                        set_script_pubkey_enabled(true);
-                        set_script_pubkey_error(false);
+                        script_pubkey_enabled.set(true);
+                        script_pubkey_error.set(false);
                         s.to_hex()
                     }
                     Err(e) => {
-                        set_script_pubkey_enabled(false);
-                        set_script_pubkey_error(true);
+                        script_pubkey_enabled.set(false);
+                        script_pubkey_error.set(true);
                         e.to_string()
                     }
                 }
             }
             ScriptDisplayFormat::Asm => {
-                set_script_pubkey_enabled(false);
+                script_pubkey_enabled.set(false);
                 let script: Result<Script> = script_pubkey.try_into();
                 match script {
                     Ok(s) => {
-                        set_script_pubkey_error(false);
+                        script_pubkey_error.set(false);
                         s.asm()
                     }
                     Err(e) => {
-                        set_script_pubkey_error(true);
+                        script_pubkey_error.set(true);
                         e.to_string()
                     }
                 }
             }
             ScriptDisplayFormat::Addr => {
                 if script_pubkey.empty_or_addr() {
-                    set_script_pubkey_error(false);
-                    set_script_pubkey_enabled(true);
+                    script_pubkey_error.set(false);
+                    script_pubkey_enabled.set(true);
                     return script_pubkey.inner();
                 }
                 let script: Script = match script_pubkey.try_into() {
                     Ok(s) => s,
                     Err(e) => {
-                        set_script_pubkey_error(true);
-                        set_script_pubkey_enabled(false);
+                        script_pubkey_error.set(true);
+                        script_pubkey_enabled.set(false);
                         return e.to_string();
                     }
                 };
                 match script_to_cash_addr(&script, Network::Bitcoin) {
                     Ok(a) => {
-                        set_script_pubkey_enabled(true);
-                        set_script_pubkey_error(false);
+                        script_pubkey_enabled.set(true);
+                        script_pubkey_error.set(false);
                         a
                     }
                     Err(e) => {
-                        set_script_pubkey_enabled(false);
-                        set_script_pubkey_error(true);
+                        script_pubkey_enabled.set(false);
+                        script_pubkey_error.set(true);
                         e.to_string()
                     }
                 }
@@ -190,10 +190,10 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                 on:change=move |e| {
                     match script_format() {
                         ScriptDisplayFormat::Hex => {
-                            set_script_pubkey(ScriptPubkeyData::Hex(event_target_value(&e)));
+                            script_pubkey.set(ScriptPubkeyData::Hex(event_target_value(&e)));
                         }
                         ScriptDisplayFormat::Addr => {
-                            set_script_pubkey(ScriptPubkeyData::Addr(event_target_value(&e)));
+                            script_pubkey.set(ScriptPubkeyData::Addr(event_target_value(&e)));
                         }
                         _ => unreachable!(),
                     }
@@ -213,7 +213,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                 <select
                     class="bg-inherit border rounded ml-1 p-1"
                     on:input=move |e| {
-                        set_script_format(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                        script_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                     }
                     prop:value={move || script_format().to_str()}
                 >
