@@ -17,16 +17,13 @@ use bitcoincash::secp256k1::{rand, Message, Secp256k1};
 use bitcoincash::{KeyPair, PackedLockTime, Transaction};
 use components::tx_output::ScriptDisplayFormat;
 use components::ParsedInput;
-use futures::future::FutureExt;
-use futures::StreamExt;
 use leptos::{
     component, create_rw_signal, create_signal, event_target_value, logging::log, mount_to_body,
-    on_cleanup, view, For, IntoView, SignalGet, SignalSet, SignalUpdate, SignalWith,
+    view, For, IntoView, SignalGet, SignalSet, SignalUpdate, SignalWith,
 };
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
-use crate::electrum_client::ElectrumClient;
 use crate::partially_signed::PartiallySignedTransaction;
 
 fn main() {
@@ -94,7 +91,7 @@ fn App() -> impl IntoView {
                 .collect()
         });
         let output = output?;
-        let tx = Transaction {
+        let tx = PartiallySignedTransaction {
             version: tx_version_rw.get(),
             lock_time: PackedLockTime(tx_locktime_rw.get()),
             input,
@@ -139,14 +136,7 @@ fn App() -> impl IntoView {
 
         tx_inputs.with(|tx_inputs| {
             for (i, input) in tx.input.iter().enumerate() {
-                tx_inputs[i]
-                    .txid
-                    .set(input.previous_output().txid.to_string());
-                tx_inputs[i].vout.set(input.previous_output().vout);
-                tx_inputs[i]
-                    .script_sig
-                    .set(input.script_sig().unwrap().to_hex());
-                tx_inputs[i].sequence.set(input.sequence().0);
+                tx_inputs[i].update_from_txin(input);
             }
         });
 
@@ -302,48 +292,48 @@ fn App() -> impl IntoView {
     }
 }
 
-#[component]
-fn ElectrumThingo() -> impl IntoView {
-    let (cancel_send, mut cancel_recv) = futures::channel::oneshot::channel::<()>();
-    on_cleanup(|| {
-        cancel_send.send(()).ok();
-    });
-
-    leptos::spawn_local(async move {
-        let client = jsonrpsee::wasm_client::WasmClientBuilder::new()
-            .build("wss://chipnet.imaginary.cash:50004")
-            .await
-            .unwrap();
-        log!("Connected");
-        let client = ElectrumClient::new(client);
-
-        // Protocol version negotiation
-        let version = client.server_version("").await.unwrap();
-        log!(
-            "Server version: {}, protocol version: {}",
-            version.server_software_version,
-            version.protocol_version
-        );
-
-        let (current_head, mut subscription) = client.blockchain_headers_subscribe().await.unwrap();
-        log!("\n{current_head:?}");
-
-        futures::select! {
-            _ = cancel_recv => (),
-            _ = client.ping_loop().fuse() => (),
-            _ = async move {
-                loop {
-                    let result = subscription.next().await;
-                    log!("\n{result:?}");
-                    if result.is_none() {
-                        break;
-                    }
-                }
-            }.fuse() => (),
-        }
-        log!("Disconnect");
-    });
-}
+// #[component]
+// fn ElectrumThingo() -> impl IntoView {
+//     let (cancel_send, mut cancel_recv) = futures::channel::oneshot::channel::<()>();
+//     on_cleanup(|| {
+//         cancel_send.send(()).ok();
+//     });
+//
+//     leptos::spawn_local(async move {
+//         let client = jsonrpsee::wasm_client::WasmClientBuilder::new()
+//             .build("wss://chipnet.imaginary.cash:50004")
+//             .await
+//             .unwrap();
+//         log!("Connected");
+//         let client = ElectrumClient::new(client);
+//
+//         // Protocol version negotiation
+//         let version = client.server_version("").await.unwrap();
+//         log!(
+//             "Server version: {}, protocol version: {}",
+//             version.server_software_version,
+//             version.protocol_version
+//         );
+//
+//         let (current_head, mut subscription) = client.blockchain_headers_subscribe().await.unwrap();
+//         log!("\n{current_head:?}");
+//
+//         futures::select! {
+//             _ = cancel_recv => (),
+//             _ = client.ping_loop().fuse() => (),
+//             _ = async move {
+//                 loop {
+//                     let result = subscription.next().await;
+//                     log!("\n{result:?}");
+//                     if result.is_none() {
+//                         break;
+//                     }
+//                 }
+//             }.fuse() => (),
+//         }
+//         log!("Disconnect");
+//     });
+// }
 
 #[component]
 fn AsyncCounter() -> impl IntoView {
