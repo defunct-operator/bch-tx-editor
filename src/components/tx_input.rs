@@ -1,5 +1,6 @@
 use anyhow::Result;
 use bitcoincash::hashes::hex::{FromHex, ToHex};
+use bitcoincash::secp256k1::{Secp256k1, Verification};
 use bitcoincash::{hashes, Network, OutPoint, Script, Sequence, TxIn};
 use leptos::{
     component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show,
@@ -196,7 +197,10 @@ impl TryFrom<TxInputState> for MaybeUnsignedTxIn {
 }
 
 #[component]
-pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
+pub fn TxInput<C: Verification + 'static>(
+    tx_input: TxInputState,
+    secp: StoredValue<Secp256k1<C>>,
+) -> impl IntoView {
     let txid = tx_input.txid;
     let script_sig = tx_input.script_sig;
     let script_format = RwSignal::new(String::from("hex"));
@@ -290,7 +294,7 @@ pub fn TxInput(tx_input: TxInputState) -> impl IntoView {
                         return e.to_string();
                     }
                 };
-                let Some(script) = script.script_pubkey() else {
+                let Some(script) = secp.with_value(|s| script.script_pubkey(s)) else {
                     utxo_pubkey_enabled.set(false);
                     utxo_pubkey_error.set(true);
                     return "Unimplemented".into();

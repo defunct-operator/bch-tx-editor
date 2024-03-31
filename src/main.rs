@@ -17,11 +17,11 @@ use bitcoincash::secp256k1::{rand, Message, Secp256k1};
 use bitcoincash::{KeyPair, PackedLockTime, Transaction};
 use components::tx_output::ScriptDisplayFormat;
 use components::ParsedInput;
-use leptos::RwSignal;
 use leptos::{
     component, event_target_value, logging::log, mount_to_body, view, For, IntoView, SignalGet,
     SignalSet, SignalUpdate, SignalWith,
 };
+use leptos::{RwSignal, StoredValue};
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
@@ -34,6 +34,7 @@ fn main() {
 
 #[component]
 fn App() -> impl IntoView {
+    let secp = StoredValue::new(Secp256k1::new());
     let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
     let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
     let tx_version_rw = RwSignal::new(2i32);
@@ -206,7 +207,7 @@ fn App() -> impl IntoView {
                             let tx_input = tx_inputs.with(|v| v[i]);
                             view! {
                                 <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
-                                    <TxInput tx_input=tx_input />
+                                    <TxInput tx_input=tx_input secp=secp />
                                     <button
                                         on:click=move |_| delete_tx_input(tx_input.key)
                                         class="border border-solid rounded border-stone-600 px-2 bg-red-950"

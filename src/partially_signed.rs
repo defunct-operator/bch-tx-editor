@@ -14,7 +14,9 @@ use bitcoincash::{
         Decodable, Encodable,
     },
     psbt::serialize::{Deserialize, Serialize},
-    OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt,
+    secp256k1::{Secp256k1, Verification},
+    util::bip32::{ChildNumber, ExtendedPubKey},
+    Address, Network, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt,
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -69,15 +71,27 @@ impl UnsignedScriptSig {
     /// Get the inner script pubkey.
     ///
     /// Returns `None` if the pubkey is not prefixed with 0xFD or if parsing fails for any reason.
-    pub fn script_pubkey(&self) -> Option<Script> {
+    pub fn script_pubkey<C: Verification>(&self, secp: &Secp256k1<C>) -> Option<Script> {
         let mut iter = self.0.instructions();
         let Instruction::PushBytes(&[0xff]) = iter.next()?.ok()? else {
             return None;
         };
-        let Instruction::PushBytes(&[0xfd, ref spk @ ..]) = iter.next()?.ok()? else {
-            return None;
-        };
-        Some(spk.to_vec().into())
+        match iter.next()?.ok()? {
+            Instruction::PushBytes(&[0xfd, ref spk @ ..]) => Some(spk.to_vec().into()),
+            Instruction::PushBytes(&[0xff, ref xpub_bytes @ ..]) => {
+                let mut xpub = ExtendedPubKey::decode(&xpub_bytes[..78]).ok()?;
+                let mut path_bytes = &xpub_bytes[78..];
+                while !path_bytes.is_empty() {
+                    let mut n = u32::from(u16::consensus_decode(&mut path_bytes).ok()?);
+                    if n == 0xffff {
+                        n = u32::consensus_decode(&mut path_bytes).ok()?;
+                    }
+                    xpub = xpub.ckd_pub(secp, ChildNumber::Normal { index: n }).ok()?;
+                }
+                Some(Address::p2pkh(&xpub.to_pub(), Network::Bitcoin).script_pubkey())
+            }
+            _ => None,
+        }
     }
 
     /// The bare script as it would appear in an Electron Cash unsigned transaction.
@@ -159,8 +173,8 @@ fn is_unsigned_script_sig(s: &Script) -> bool {
 
 /// Unsigned transaction input. Compatible with Electron Cash.
 ///
-/// This only implements the 0xFD public key, so it only contains the script pubkey of the previous
-/// transaction's output, not the actual public key.
+/// This only recognizes the 0xFD and the 0xFF public key, that is, the unknown pubkey but known
+/// address form, and the bip32 xpub + derivation form.
 ///
 /// * [Electrum documentation](https://electrum.readthedocs.io/en/latest/transactions.html)
 /// * [Electron Cash source 1](https://github.com/Electron-Cash/Electron-Cash/blob/8e966d3c53fc1c394054a273ca2dc2be578b0abf/electroncash/keystore.py#L698)
