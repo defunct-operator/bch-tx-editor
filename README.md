@@ -1,12 +1,13 @@
 bch-tx-editor
 =============
 
-An simple editor for hand crafting Bitcoin Cash transactions.
+An simple low level editor for hand crafting Bitcoin Cash transactions. Supports CashTokens and
+Electron Cash unsigned transactions.
 
 Building
 ========
 
-Install the Rust compiler.
+Install the nightly Rust compiler.
 
 Install [Trunk](https://trunkrs.dev/).
 
