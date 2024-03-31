@@ -42,6 +42,7 @@ fn App() -> impl IntoView {
     let tx_hex_errored = RwSignal::new(false);
     let tx_input_id = RwSignal::new(1);
     let tx_output_id = RwSignal::new(1);
+    let serialize_message = RwSignal::new(String::new());
 
     let new_tx_input = move || {
         let id = tx_input_id();
@@ -99,9 +100,15 @@ fn App() -> impl IntoView {
             output,
         };
         let tx_serialized = tx.serialize();
+        if serialize_message.with(|s| s.is_empty() || s.ends_with('.')) {
+            serialize_message.set(format!("{} bytes", tx_serialized.len()));
+        } else {
+            serialize_message.set(format!("{} bytes.", tx_serialized.len()));
+        }
         Ok(tx_serialized.to_hex())
     };
     let deserialize_tx = move || -> Result<()> {
+        serialize_message.set(String::new());
         let hex = tx_hex.with(|t| Vec::from_hex(t))?;
         let tx = PartiallySignedTransaction::deserialize(&hex)
             .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
@@ -280,6 +287,7 @@ fn App() -> impl IntoView {
             >
                 "Deserialize"
             </button>
+            <span>{serialize_message}</span>
             <textarea
                 spellcheck="false"
                 class="border border-solid rounded border-stone-600 px-1 w-full placeholder:text-stone-600 font-mono grow my-1"
