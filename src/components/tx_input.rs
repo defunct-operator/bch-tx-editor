@@ -92,7 +92,7 @@ impl TxInputState {
         Self {
             txid: RwSignal::default(),
             vout: RwSignal::new(0),
-            sequence: RwSignal::new(4294967295),
+            sequence: RwSignal::new(4294967294),
             script_sig: RwSignal::default(),
             unsigned: RwSignal::new(false),
             utxo_pubkey: RwSignal::default(),
