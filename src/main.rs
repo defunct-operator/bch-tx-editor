@@ -3,9 +3,9 @@
 mod macros;
 mod components;
 mod electrum_client;
+pub mod js_reexport;
 pub mod partially_signed;
 pub mod util;
-pub mod js_reexport;
 
 use std::time::Duration;
 
@@ -16,7 +16,7 @@ use bitcoincash::hashes::sha256;
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
 use bitcoincash::secp256k1::{rand, Message, Secp256k1};
 use bitcoincash::{KeyPair, PackedLockTime, Transaction};
-use components::tx_output::ScriptDisplayFormat;
+use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use components::ParsedInput;
 use leptos::{
     component, event_target_value, logging::log, mount_to_body, view, For, IntoView, SignalGet,
@@ -25,7 +25,7 @@ use leptos::{
 use leptos::{update, RwSignal, StoredValue};
 
 use crate::components::tx_input::{TxInput, TxInputState};
-use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
+use crate::components::tx_output::{TxOutput, TxOutputState};
 use crate::partially_signed::PartiallySignedTransaction;
 
 fn main() {
@@ -165,7 +165,7 @@ fn App() -> impl IntoView {
                 }
                 tx_outputs[i]
                     .script_pubkey
-                    .set(ScriptPubkeyData::Hex(script_pubkey_hex));
+                    .set(ScriptInputValue::Hex(script_pubkey_hex));
                 tx_outputs[i].value.set(output.value);
 
                 tx_outputs[i]

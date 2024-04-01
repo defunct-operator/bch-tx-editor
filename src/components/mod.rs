@@ -5,6 +5,7 @@ use leptos::{
     ReadSignal, RwSignal, SignalSet,
 };
 
+pub mod script_input;
 pub mod token_data;
 pub mod tracker;
 pub mod tx_input;
@@ -16,7 +17,7 @@ pub fn ParsedInput<T: FromStr + Clone + 'static, I: IntoAttribute>(
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = "")] class: &'static str,
     id: I,
-    #[prop(into, default=None::<bool>.into())] disabled: MaybeProp<bool>,
+    #[prop(into, default=Default::default())] disabled: MaybeProp<bool>,
 ) -> impl IntoView
 where
     ReadSignal<T>: IntoProperty,

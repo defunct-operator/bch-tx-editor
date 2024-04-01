@@ -1,14 +1,19 @@
 use anyhow::Result;
-use bitcoincash::hashes::hex::{FromHex, ToHex};
+use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::secp256k1::{Secp256k1, Verification};
-use bitcoincash::{hashes, Network, OutPoint, Script, Sequence, TxIn};
+use bitcoincash::{Network, OutPoint, Script, Sequence, TxIn};
 use leptos::{
     component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show,
     SignalDispose, SignalGet, SignalSet, SignalUpdate, StoredValue,
 };
 
-use super::token_data::TokenDataState;
-use crate::components::{token_data::TokenData, ParsedInput};
+use super::script_input::ScriptInputValue;
+use crate::components::script_input::{ScriptDisplayFormat, ScriptInput};
+use crate::components::{
+    token_data::{TokenData, TokenDataState},
+    ParsedInput,
+};
+use crate::js_reexport::bin_to_cash_assembly;
 use crate::partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn};
 use crate::util::{cash_addr_to_script, script_to_cash_addr};
 
@@ -78,7 +83,8 @@ pub struct TxInputState {
     pub txid: RwSignal<String>,
     pub vout: RwSignal<u32>,
     pub sequence: RwSignal<u32>,
-    pub script_sig: RwSignal<String>,
+    pub script_sig: RwSignal<ScriptInputValue>,
+    pub script_sig_format: RwSignal<ScriptDisplayFormat>,
     pub unsigned: RwSignal<bool>,
     /// The raw data that Electron Cash shoves into the scriptSig section in hex, typically
     /// the extended public key.
@@ -95,6 +101,7 @@ impl TxInputState {
             vout: RwSignal::new(0),
             sequence: RwSignal::new(4294967294),
             script_sig: RwSignal::default(),
+            script_sig_format: RwSignal::new(ScriptDisplayFormat::Hex),
             unsigned: RwSignal::new(false),
             utxo_pubkey: RwSignal::default(),
             utxo_amount: RwSignal::new(0),
@@ -109,6 +116,7 @@ impl TxInputState {
             vout,
             sequence,
             script_sig,
+            script_sig_format,
             unsigned,
             utxo_pubkey,
             utxo_amount,
@@ -119,6 +127,7 @@ impl TxInputState {
         vout.dispose();
         sequence.dispose();
         script_sig.dispose();
+        script_sig_format.dispose();
         unsigned.dispose();
         utxo_pubkey.dispose();
         utxo_amount.dispose();
@@ -132,14 +141,17 @@ impl TxInputState {
 
         match input {
             MaybeUnsignedTxIn::Signed(txin) => {
-                self.script_sig.set(txin.script_sig.to_hex());
+                self.script_sig
+                    .set(ScriptInputValue::Hex(txin.script_sig.to_hex()));
+                self.script_sig_format.set(ScriptDisplayFormat::Hex);
                 self.unsigned.set(false);
                 self.utxo_pubkey.set(Default::default());
                 self.utxo_amount.set(0);
                 self.token_data_state.update_from_token_data(None);
             }
             MaybeUnsignedTxIn::Unsigned(txin) => {
-                self.script_sig.update(String::clear);
+                self.script_sig.update(ScriptInputValue::clear);
+                self.script_sig_format.set(ScriptDisplayFormat::Hex);
                 self.unsigned.set(true);
                 self.utxo_pubkey.set(UtxoPubkeyData::Hex(
                     txin.unsigned_script_sig.raw_script().to_hex(),
@@ -153,16 +165,14 @@ impl TxInputState {
 }
 
 impl TryFrom<TxInputState> for TxIn {
-    type Error = hashes::hex::Error;
+    type Error = anyhow::Error;
     fn try_from(tx_input: TxInputState) -> Result<Self, Self::Error> {
-        let mut script_sig = tx_input.script_sig.get();
-        script_sig.retain(|c| !c.is_ascii_whitespace());
         Ok(TxIn {
             previous_output: OutPoint {
                 txid: tx_input.txid.get().parse()?,
                 vout: tx_input.vout.get(),
             },
-            script_sig: script_sig.parse()?,
+            script_sig: tx_input.script_sig.get().try_into()?,
             sequence: Sequence(tx_input.sequence.get()),
             witness: Default::default(),
         })
@@ -203,9 +213,7 @@ pub fn TxInput<C: Verification + 'static>(
 ) -> impl IntoView {
     let txid = tx_input.txid;
     let script_sig = tx_input.script_sig;
-    let script_format = RwSignal::new(String::from("hex"));
-    let script_enabled = RwSignal::new(true);
-    let script_error = RwSignal::new(false);
+    let script_sig_format = tx_input.script_sig_format;
     let cashtoken_enabled = tx_input.token_data_state.cashtoken_enabled;
     let unsigned = tx_input.unsigned;
     let utxo_pubkey = tx_input.utxo_pubkey;
@@ -216,33 +224,6 @@ pub fn TxInput<C: Verification + 'static>(
 
     let parsed_input_seq_id = StoredValue::new(format!("tx-input-sn-{}", tx_input.key));
     let parsed_input_val_id = StoredValue::new(format!("tx-input-val-{}", tx_input.key));
-
-    let try_render_script = move || -> Result<String> {
-        match &*script_format() {
-            "hex" => {
-                script_enabled.set(true);
-                Ok(script_sig())
-            }
-            "asm" => {
-                script_enabled.set(false);
-                let mut s = script_sig();
-                s.retain(|c| !c.is_ascii_whitespace());
-                let s = Script::from_hex(&s)?;
-                Ok(s.asm())
-            }
-            _ => unreachable!(),
-        }
-    };
-    let render_script = move || match try_render_script() {
-        Ok(s) => {
-            script_error.set(false);
-            s
-        }
-        Err(e) => {
-            script_error.set(true);
-            e.to_string()
-        }
-    };
 
     let render_utxo_pubkey = move || {
         let utxo_pubkey = utxo_pubkey();
@@ -272,7 +253,7 @@ pub fn TxInput<C: Verification + 'static>(
                 match script {
                     Ok(s) => {
                         utxo_pubkey_error.set(false);
-                        s.raw_script().asm()
+                        bin_to_cash_assembly(s.raw_script().as_bytes().into())
                     }
                     Err(e) => {
                         utxo_pubkey_error.set(true);
@@ -330,28 +311,29 @@ pub fn TxInput<C: Verification + 'static>(
             <ParsedInput value=tx_input.vout placeholder="Index" class="w-16" id=""/>
         </div>
         <div class="mb-1 flex">
-            <textarea
-                spellcheck="false"
-                on:change=move |e| script_sig.set(event_target_value(&e))
-                class=concat!(
-                    "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
-                    "placeholder:text-stone-600 font-mono bg-stone-900 grow",
-                )
-                placeholder="Unlocking Script Hex"
-                prop:value=render_script
-                disabled=move || !script_enabled() || unsigned()
-                class=("text-red-700", script_error)
-                class=("opacity-30", unsigned)
+            <ScriptInput
+                value=script_sig
+                format=script_sig_format
+                disabled=unsigned
+                placeholder=move || {
+                    match script_sig_format() {
+                        ScriptDisplayFormat::Addr => "How did you make this happen?",
+                        ScriptDisplayFormat::Hex => "Unlocking Script Hex",
+                        ScriptDisplayFormat::Asm => "Unlocking Script Asm",
+                    }
+                }
             />
             <div>
                 <select
                     class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
-                    on:input=move |e| script_format.set(event_target_value(&e))
-                    prop:value={script_format}
+                    on:input=move |e| {
+                        script_sig_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                    }
+                    prop:value={move || script_sig_format().to_str()}
                     disabled=unsigned
                 >
-                    <option value="hex">Hex</option>
-                    <option value="asm">Asm</option>
+                    <option value={ScriptDisplayFormat::Asm.to_str()}>Asm</option>
+                    <option value={ScriptDisplayFormat::Hex.to_str()} selected>Hex</option>
                 </select>
             </div>
         </div>
