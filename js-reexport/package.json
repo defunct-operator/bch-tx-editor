@@ -1,0 +1,14 @@
+{
+  "name": "js-reexport",
+  "version": "0.0.1",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild index.js --bundle --minify --format=esm --outfile=dist/reexports.js"
+  },
+  "dependencies": {
+    "@bitauth/libauth": "^2.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.20.2"
+  }
+}

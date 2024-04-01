@@ -1,0 +1,7 @@
+[watch]
+ignore = ["js-reexport/dist"]
+
+[[hooks]]
+stage = "pre_build"
+command = "npm"
+command_arguments = ["--prefix=js-reexport", "run", "build"]

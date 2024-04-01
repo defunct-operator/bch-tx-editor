@@ -5,6 +5,7 @@ mod components;
 mod electrum_client;
 pub mod partially_signed;
 pub mod util;
+pub mod js_reexport;
 
 use std::time::Duration;
 
@@ -21,7 +22,7 @@ use leptos::{
     component, event_target_value, logging::log, mount_to_body, view, For, IntoView, SignalGet,
     SignalSet, SignalUpdate, SignalWith,
 };
-use leptos::{RwSignal, StoredValue};
+use leptos::{update, RwSignal, StoredValue};
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{ScriptPubkeyData, TxOutput, TxOutputState};
@@ -37,8 +38,8 @@ fn App() -> impl IntoView {
     let secp = StoredValue::new(Secp256k1::new());
     let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
     let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
-    let tx_version_rw = RwSignal::new(2i32);
-    let tx_locktime_rw = RwSignal::new(0u32);
+    let tx_version = RwSignal::new(2i32);
+    let tx_locktime = RwSignal::new(0u32);
     let tx_hex = RwSignal::new(String::new());
     let tx_hex_errored = RwSignal::new(false);
     let tx_input_id = RwSignal::new(1);
@@ -95,8 +96,8 @@ fn App() -> impl IntoView {
         });
         let output = output?;
         let tx = PartiallySignedTransaction {
-            version: tx_version_rw.get(),
-            lock_time: PackedLockTime(tx_locktime_rw.get()),
+            version: tx_version.get(),
+            lock_time: PackedLockTime(tx_locktime.get()),
             input,
             output,
         };
@@ -140,8 +141,8 @@ fn App() -> impl IntoView {
             new_tx_output();
         }
 
-        tx_version_rw.set(tx.version);
-        tx_locktime_rw.set(tx.lock_time.0);
+        tx_version.set(tx.version);
+        tx_locktime.set(tx.lock_time.0);
 
         tx_inputs.with(|tx_inputs| {
             for (i, input) in tx.input.iter().enumerate() {
@@ -174,6 +175,20 @@ fn App() -> impl IntoView {
         });
         Ok(())
     };
+    let reset = move |_| {
+        update!(|tx_inputs, tx_outputs| {
+            for tx_input in tx_inputs.drain(..) {
+                tx_input.dispose();
+            }
+            for tx_output in tx_outputs.drain(..) {
+                tx_output.dispose();
+            }
+        });
+        new_tx_input();
+        new_tx_output();
+        tx_version.set(2);
+        tx_locktime.set(0);
+    };
 
     view! {
         <div class="table">
@@ -182,7 +197,7 @@ fn App() -> impl IntoView {
                     <label for="tx_version">TX version:</label>
                 </div>
                 <div class="table-cell pb-1">
-                    <ParsedInput id="tx_version" value=tx_version_rw placeholder="2"/>
+                    <ParsedInput id="tx_version" value=tx_version placeholder="2"/>
                 </div>
             </div>
             <div class="table-row">
@@ -190,7 +205,7 @@ fn App() -> impl IntoView {
                     <label for="tx_locktime">Locktime:</label>
                 </div>
                 <div class="table-cell">
-                    <ParsedInput id="tx_locktime" value=tx_locktime_rw placeholder="TX locktime"/>
+                    <ParsedInput id="tx_locktime" value=tx_locktime placeholder="TX locktime"/>
                 </div>
             </div>
         </div>
@@ -287,6 +302,12 @@ fn App() -> impl IntoView {
                 }
             >
                 "Deserialize"
+            </button>
+            <button
+                class="border border-solid rounded border-stone-600 px-1 mx-1 ml-3 bg-red-950"
+                on:click=reset
+            >
+                "Reset"
             </button>
             <span>{serialize_message}</span>
             <textarea

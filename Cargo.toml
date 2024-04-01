@@ -23,5 +23,6 @@ console_error_panic_hook = "0.1.7"
 opt-level = 3
 
 [profile.release]
-strip = "symbols"
 opt-level = "s"
+lto = true
+codegen-units = 1
