@@ -152,7 +152,7 @@ fn is_unsigned_script_sig(s: &Script) -> bool {
             _ => false,
         },
         // Possibly multisig
-        Some(Ok(Instruction::Op(OP_PUSHBYTES_0))) => {
+        Some(Ok(Instruction::PushBytes(&[]))) => {
             let mut num_pushes = 0;
             let mut last = None;
             for x in ins {
@@ -548,6 +548,23 @@ mod tests {
             "03e6cb0c2f4e696365486173682fffffffff0300000000000000000e6a0c17d8d7a62027d4b56b519d00",
             "dc26fa24000000001976a9145633aebf44152de83126acc6282c99f8b33422dc88ac219e5f0000000000",
             "1976a914f9bfd1340cce62f2ff7eaff4b751dc0ba90d3f6388ac00000000",
+        ))
+        .unwrap();
+        let tx: PartiallySignedTransaction = deserialize(&tx_bytes).unwrap();
+        assert_eq!(tx_bytes, serialize(&tx));
+    }
+
+    #[test]
+    fn test_unsigned_multisig() {
+        let tx_bytes = Vec::<u8>::from_hex(concat!(
+            "0100000001e504e5e7a9f8de239466eb56fb11f35a7f6abb9fdcf5f880cf7d33ca61f59e2002000000b4",
+            "0001ff01ff4cad524c53ff0488b21e038a4e0085800000004a79f36002d5586864107032ba0ef24ed69c",
+            "c4443a10c1d83ac3fab997887dda02410a7028fb543bce27b28c41a4e1ce254201d74af75ce0ceeaac13",
+            "aaf77f3771000000004c53ff0488b21e03ffe004bd8000000026bbc9039eb31c596735ff6974c27ba089",
+            "f3f2978cc0b792d62887c0f60c67b102a928d855d5a997fbc719c8c304122377106222c1fe67576282bc",
+            "ceba6afc033d0000000052aefeffffff98a003000000000002011c01000000000017a914c3d5594a1a02",
+            "b005e15fa5ce14ea8cb45d668bba87478302000000000017a914616cc2c9da3f60caf6abd9500576984e",
+            "4fa484748765d00c00",
         ))
         .unwrap();
         let tx: PartiallySignedTransaction = deserialize(&tx_bytes).unwrap();
