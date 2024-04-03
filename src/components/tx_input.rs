@@ -278,7 +278,7 @@ pub fn TxInput<C: Verification + 'static>(
                 let Some(script) = secp.with_value(|s| script.script_pubkey(s)) else {
                     utxo_pubkey_enabled.set(false);
                     utxo_pubkey_error.set(true);
-                    return "Unimplemented".into();
+                    return "Unknown address".into();
                 };
                 match script_to_cash_addr(&script, Network::Bitcoin) {
                     Ok(a) => {

@@ -3,7 +3,7 @@ use std::fmt::LowerHex;
 use bitcoincash::{
     blockdata::{
         opcodes::{
-            all::{OP_CHECKMULTISIG, OP_PUSHBYTES_0, OP_SPECIAL_TOKEN_PREFIX},
+            all::{OP_CHECKMULTISIG, OP_SPECIAL_TOKEN_PREFIX},
             Class, ClassifyContext,
         },
         script::{self, Instruction},
@@ -56,7 +56,7 @@ impl LowerHex for UnsignedScriptSig {
 }
 
 impl UnsignedScriptSig {
-    /// 0xFD: unknown pubkey, but we know the Bitcoin address.
+    /// 0xFD: unknown pubkey, but we know the Bitcoin address, i.e. the script pubkey.
     pub fn from_script_pubkey(script_pubkey: Script) -> Self {
         let mut prefixed_pubkey = vec![0xfd];
         prefixed_pubkey.extend_from_slice(script_pubkey.as_bytes());
@@ -69,26 +69,36 @@ impl UnsignedScriptSig {
     }
 
     /// Get the inner script pubkey.
-    ///
-    /// Returns `None` if the pubkey is not prefixed with 0xFD or if parsing fails for any reason.
     pub fn script_pubkey<C: Verification>(&self, secp: &Secp256k1<C>) -> Option<Script> {
         let mut iter = self.0.instructions();
-        let Instruction::PushBytes(&[0xff]) = iter.next()?.ok()? else {
+        let Instruction::PushBytes(first_push) = iter.next()?.ok()? else {
             return None;
         };
-        match iter.next()?.ok()? {
-            Instruction::PushBytes(&[0xfd, ref spk @ ..]) => Some(spk.to_vec().into()),
-            Instruction::PushBytes(&[0xff, ref xpub_bytes @ ..]) => {
-                let mut xpub = ExtendedPubKey::decode(&xpub_bytes[..78]).ok()?;
-                let mut path_bytes = &xpub_bytes[78..];
-                while !path_bytes.is_empty() {
-                    let mut n = u32::from(u16::consensus_decode(&mut path_bytes).ok()?);
-                    if n == 0xffff {
-                        n = u32::consensus_decode(&mut path_bytes).ok()?;
+        leptos::logging::log!("{first_push:?}");
+        if first_push.is_empty() {
+            // multisig
+            let Instruction::PushBytes(fake_redeem_script) = iter.last()?.ok()? else {
+                return None;
+            };
+            let mut redeem_script = script::Builder::new();
+            for ins in Script::from(fake_redeem_script.to_vec()).instructions() {
+                match ins.ok()? {
+                    Instruction::Op(op) => redeem_script = redeem_script.push_opcode(op),
+                    Instruction::PushBytes(xpubkey) => {
+                        redeem_script =
+                            redeem_script.push_key(&ec_ff_parse_xpubkey(secp, xpubkey)?.to_pub())
                     }
-                    xpub = xpub.ckd_pub(secp, ChildNumber::Normal { index: n }).ok()?;
                 }
-                Some(Address::p2pkh(&xpub.to_pub(), Network::Bitcoin).script_pubkey())
+            }
+            return Some(redeem_script.into_script().to_p2sh());
+        } else if first_push != [0xff] {
+            return None;
+        }
+        match iter.next()?.ok()? {
+            Instruction::PushBytes([0xfd, ref spk @ ..]) => Some(spk.to_vec().into()),
+            Instruction::PushBytes(bytes @ [0xff, ..]) => {
+                let xpubkey = ec_ff_parse_xpubkey(secp, bytes)?;
+                Some(Address::p2pkh(&xpubkey.to_pub(), Network::Bitcoin).script_pubkey())
             }
             _ => None,
         }
@@ -108,10 +118,33 @@ impl UnsignedScriptSig {
     }
 }
 
+/// Parse the 0xFF prefixed extended public key, which consists of the bip32 xpub and the
+/// derivation.
+fn ec_ff_parse_xpubkey<C: Verification>(
+    secp: &Secp256k1<C>,
+    bytes: &[u8],
+) -> Option<ExtendedPubKey> {
+    let [0xff, xpub_bytes @ ..] = bytes else {
+        return None;
+    };
+
+    let mut xpub = ExtendedPubKey::decode(&xpub_bytes[..78]).ok()?;
+    let mut path_bytes = &xpub_bytes[78..];
+    while !path_bytes.is_empty() {
+        let mut n = u32::from(u16::consensus_decode(&mut path_bytes).ok()?);
+        if n == 0xffff {
+            n = u32::consensus_decode(&mut path_bytes).ok()?;
+        }
+        xpub = xpub.ckd_pub(secp, ChildNumber::Normal { index: n }).ok()?;
+    }
+    Some(xpub)
+}
+
 fn is_unsigned_p2pkh_payload(s: &[u8]) -> bool {
     match s {
         [0xfd, spk @ ..] => Script::from(spk.to_vec()).is_p2pkh(),
-        [0x02 | 0x03 | 0x04 | 0xfe | 0xff, ..] => true, // TODO
+        [0xfe | 0xff, ..] => true, // TODO actually parse?
+        [0x02..=0x04, ..] => false, // unsupported
         _ => false,
     }
 }
@@ -145,13 +178,14 @@ fn is_multisig(script: &[u8], num_sigs: usize) -> bool {
 fn is_unsigned_script_sig(s: &Script) -> bool {
     let mut ins = s.instructions();
     match ins.next() {
-        // Possibly p2pkh, could also be a p2sh contract, the format is ambiguous so its actually
-        // impossible to tell.
+        // Possibly unsigned p2pkh or unsigned p2sh without xpubkeys
         Some(Ok(Instruction::PushBytes(&[0xff]))) => match ins.next() {
-            Some(Ok(Instruction::PushBytes(payload))) => is_unsigned_p2pkh_payload(payload),
+            Some(Ok(Instruction::PushBytes(payload))) => {
+                is_unsigned_p2pkh_payload(payload) && ins.next().is_none()
+            }
             _ => false,
         },
-        // Possibly multisig
+        // Possibly multisig with xpubkeys
         Some(Ok(Instruction::PushBytes(&[]))) => {
             let mut num_pushes = 0;
             let mut last = None;
