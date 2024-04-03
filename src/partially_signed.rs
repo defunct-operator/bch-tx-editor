@@ -98,7 +98,7 @@ impl UnsignedScriptSig {
             Instruction::PushBytes([0xfd, ref spk @ ..]) => Some(spk.to_vec().into()),
             Instruction::PushBytes(bytes @ [0xff, ..]) => {
                 let xpubkey = ec_ff_parse_xpubkey(secp, bytes)?;
-                Some(Address::p2pkh(&xpubkey.to_pub(), Network::Bitcoin).script_pubkey())
+                Some(Script::new_p2pkh(&xpubkey.to_pub().pubkey_hash()))
             }
             _ => None,
         }
@@ -142,9 +142,10 @@ fn ec_ff_parse_xpubkey<C: Verification>(
 
 fn is_unsigned_p2pkh_payload(s: &[u8]) -> bool {
     match s {
-        [0xfd, spk @ ..] => Script::from(spk.to_vec()).is_p2pkh(),
-        [0xfe | 0xff, ..] => true, // TODO actually parse?
-        [0x02..=0x04, ..] => false, // unsupported
+        [0xfd, spk @ ..] => {
+            Address::from_script(&Script::from(spk.to_vec()), Network::Bitcoin).is_ok()
+        }
+        [0xfe | 0xff | 0x02..=0x04, ..] => true, // TODO actually parse?
         _ => false,
     }
 }
