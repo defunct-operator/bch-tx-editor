@@ -63,7 +63,7 @@ impl<T: ClientT + SubscriptionClientT> ElectrumClient<T> {
             .client
             .request("blockchain.headers.subscribe", ArrayParams::new())
             .await?;
-        Ok((result, subscription.map(|x| x.map(|(y,)| y))))
+        Ok((result, subscription.map(|x| Ok(x.map(|(y,)| y)?))))
     }
 
     /// The `server.ping` method.
