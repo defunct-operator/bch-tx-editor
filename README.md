@@ -1,8 +1,8 @@
 bch-tx-editor
 =============
 
-An simple low level editor for hand crafting Bitcoin Cash transactions. Supports CashTokens and
-Electron Cash unsigned transactions.
+An simple low level editor for hand crafting Bitcoin Cash transactions. Supports CashTokens,
+Libauth CashAssembly, and Electron Cash unsigned transactions.
 
 Building
 ========
