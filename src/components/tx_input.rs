@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::secp256k1::{Secp256k1, Verification};
-use bitcoincash::{Network, OutPoint, Script, Sequence, TxIn};
+use bitcoincash::{OutPoint, Script, Sequence, TxIn};
 use leptos::{
     component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show,
     SignalDispose, SignalGet, SignalSet, SignalUpdate, StoredValue,
@@ -14,8 +14,10 @@ use crate::components::{
     ParsedInput,
 };
 use crate::js_reexport::bin_to_cash_assembly;
+use crate::macros::StrEnum;
 use crate::partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn};
 use crate::util::{cash_addr_to_script, script_to_cash_addr};
+use crate::Context;
 
 str_enum! {
     #[derive(Copy, Clone, Default)]
@@ -210,6 +212,7 @@ impl TryFrom<TxInputState> for MaybeUnsignedTxIn {
 pub fn TxInput<C: Verification + 'static>(
     tx_input: TxInputState,
     secp: StoredValue<Secp256k1<C>>,
+    ctx: Context,
 ) -> impl IntoView {
     let txid = tx_input.txid;
     let script_sig = tx_input.script_sig;
@@ -280,7 +283,7 @@ pub fn TxInput<C: Verification + 'static>(
                     utxo_pubkey_error.set(true);
                     return "Unknown address".into();
                 };
-                match script_to_cash_addr(&script, Network::Bitcoin) {
+                match script_to_cash_addr(&script, ctx.network.get()) {
                     Ok(a) => {
                         utxo_pubkey_enabled.set(true);
                         utxo_pubkey_error.set(false);
@@ -314,6 +317,7 @@ pub fn TxInput<C: Verification + 'static>(
             <ScriptInput
                 value=script_sig
                 format=script_sig_format
+                network=ctx.network
                 disabled=unsigned
                 placeholder=move || {
                     match script_sig_format() {
@@ -338,7 +342,7 @@ pub fn TxInput<C: Verification + 'static>(
             </div>
         </div>
         <div class="my-1">
-            <label class="mr-1" for=parsed_input_seq_id.clone()>Sequence Number:</label>
+            <label class="mr-1" for=parsed_input_seq_id>Sequence Number:</label>
             <ParsedInput id=parsed_input_seq_id value=tx_input.sequence placeholder="Sequence"/>
             <label>
                 <input
@@ -402,7 +406,7 @@ pub fn TxInput<C: Verification + 'static>(
 
             // Amount
             <div class="my-1">
-                <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
+                <label class="mr-1" for=parsed_input_val_id>Sats:</label>
                 <ParsedInput id=parsed_input_val_id value=tx_input.utxo_amount placeholder="Sats" class="w-52"/>
                 <label>
                     <input

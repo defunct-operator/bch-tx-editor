@@ -11,7 +11,7 @@ use leptos::{
     SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith, StoredValue,
 };
 
-use crate::components::ParsedInput;
+use crate::{components::ParsedInput, macros::StrEnum};
 
 str_enum! {
     #[derive(Copy, Clone, Default)]

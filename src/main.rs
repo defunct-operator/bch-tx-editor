@@ -15,18 +15,44 @@ use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::hashes::sha256;
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
 use bitcoincash::secp256k1::{rand, Message, Secp256k1};
-use bitcoincash::{KeyPair, PackedLockTime, Transaction};
+use bitcoincash::{KeyPair, Network, PackedLockTime, Transaction};
 use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use components::ParsedInput;
 use leptos::{
     component, event_target_value, logging::log, mount_to_body, view, For, IntoView, SignalGet,
     SignalSet, SignalUpdate, SignalWith,
 };
-use leptos::{update, RwSignal, StoredValue};
+use leptos::{update, ReadSignal, RwSignal, StoredValue};
+use macros::StrEnum;
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{TxOutput, TxOutputState};
 use crate::partially_signed::PartiallySignedTransaction;
+
+impl StrEnum for Network {
+    fn to_str(self) -> &'static str {
+        match self {
+            Network::Bitcoin => "mainnet",
+            Network::Testnet => "testnet3",
+            Network::Regtest => "regtest",
+            Network::Testnet4 => "testnet4",
+            Network::Scalenet => "scalenet",
+            Network::Chipnet => "chipnet",
+        }
+    }
+
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "mainnet" => Some(Network::Bitcoin),
+            "testnet3" => Some(Network::Testnet),
+            "regtest" => Some(Network::Regtest),
+            "testnet4" => Some(Network::Testnet4),
+            "scalenet" => Some(Network::Scalenet),
+            "chipnet" => Some(Network::Chipnet),
+            _ => None,
+        }
+    }
+}
 
 fn main() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -36,6 +62,7 @@ fn main() {
 #[component]
 fn App() -> impl IntoView {
     let secp = StoredValue::new(Secp256k1::new());
+    let network = RwSignal::new(Network::Bitcoin); // TODO: make the actual selector
     let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
     let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
     let tx_version = RwSignal::new(2i32);
@@ -45,6 +72,10 @@ fn App() -> impl IntoView {
     let tx_input_id = RwSignal::new(1);
     let tx_output_id = RwSignal::new(1);
     let serialize_message = RwSignal::new(String::new());
+
+    let ctx = Context {
+        network: network.read_only(),
+    };
 
     let new_tx_input = move || {
         let id = tx_input_id();
@@ -191,21 +222,46 @@ fn App() -> impl IntoView {
     };
 
     view! {
-        <div class="table">
-            <div class="table-row">
-                <div class="table-cell pr-1 pb-1">
-                    <label for="tx_version">TX version:</label>
+        <div class="flex gap-3">
+            <div class="table">
+                <div class="table-row">
+                    <div class="table-cell pr-1 pb-1">
+                        <label for="tx_version">TX version:</label>
+                    </div>
+                    <div class="table-cell pb-1">
+                        <ParsedInput id="tx_version" value=tx_version placeholder="2"/>
+                    </div>
                 </div>
-                <div class="table-cell pb-1">
-                    <ParsedInput id="tx_version" value=tx_version placeholder="2"/>
+                <div class="table-row">
+                    <div class="table-cell pr-1">
+                        <label for="tx_locktime">Locktime:</label>
+                    </div>
+                    <div class="table-cell">
+                        <ParsedInput id="tx_locktime" value=tx_locktime placeholder="0"/>
+                    </div>
                 </div>
             </div>
-            <div class="table-row">
-                <div class="table-cell pr-1">
-                    <label for="tx_locktime">Locktime:</label>
-                </div>
-                <div class="table-cell">
-                    <ParsedInput id="tx_locktime" value=tx_locktime placeholder="TX locktime"/>
+            <div class="table ml-auto">
+                <div class="table-row">
+                    <div class="table-cell pr-1">
+                        <label for="tx_locktime">Network:</label>
+                    </div>
+                    <div class="table-cell">
+                        <select
+                            class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
+                            on:input=move |e| {
+                                network.set(Network::from_str(&event_target_value(&e)).unwrap())
+                            }
+                            prop:value={move || network().to_str()}
+                        >
+                            <option value={Network::Bitcoin.to_str()}>mainnet</option>
+                            <option value={Network::Testnet.to_str()}>testnet3</option>
+                            <option value={Network::Regtest.to_str()}>regtest</option>
+                            <option value={Network::Testnet4.to_str()}>testnet4</option>
+                            <option value={Network::Scalenet.to_str()}>scalenet</option>
+                            <option value={Network::Chipnet.to_str()}>chipnet</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
@@ -222,12 +278,12 @@ fn App() -> impl IntoView {
                             let tx_input = tx_inputs.with(|v| v[i]);
                             view! {
                                 <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
-                                    <TxInput tx_input=tx_input secp=secp />
+                                    <TxInput tx_input secp ctx/>
                                     <button
                                         on:click=move |_| delete_tx_input(tx_input.key)
                                         class="border border-solid rounded border-stone-600 px-2 bg-red-950"
                                     >
-                                        "-"
+                                        "−"
                                     </button>
                                 </li>
                             }
@@ -253,11 +309,11 @@ fn App() -> impl IntoView {
                             let tx_output = tx_outputs.with(|v| v[i]);
                             view! {
                                 <li class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2">
-                                    <TxOutput tx_output=tx_output />
+                                    <TxOutput tx_output ctx/>
                                     <button
                                         on:click=move |_| delete_tx_output(tx_output.key)
                                         class="border border-solid rounded border-stone-600 px-2 bg-red-950"
-                                    >"-"</button>
+                                    >"−"</button>
                                 </li>
                             }
                         }
@@ -321,6 +377,11 @@ fn App() -> impl IntoView {
             />
         </div>
     }
+}
+
+#[derive(Copy, Clone)]
+struct Context {
+    network: ReadSignal<Network>,
 }
 
 // #[component]

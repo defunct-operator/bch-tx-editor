@@ -5,10 +5,14 @@ use leptos::{
     SignalGet, SignalSet,
 };
 
-use crate::components::{
-    script_input::{ScriptDisplayFormat, ScriptInput, ScriptInputValue},
-    token_data::{TokenData, TokenDataState},
-    ParsedInput,
+use crate::{
+    components::{
+        script_input::{ScriptDisplayFormat, ScriptInput, ScriptInputValue},
+        token_data::{TokenData, TokenDataState},
+        ParsedInput,
+    },
+    macros::StrEnum,
+    Context,
 };
 
 #[derive(Copy, Clone)]
@@ -53,7 +57,7 @@ impl TryFrom<TxOutputState> for TxOut {
 }
 
 #[component]
-pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
+pub fn TxOutput(tx_output: TxOutputState, ctx: Context) -> impl IntoView {
     let script_pubkey = tx_output.script_pubkey;
     let script_format = tx_output.script_display_format;
     let cashtoken_enabled = tx_output.token_data_state.cashtoken_enabled;
@@ -67,6 +71,7 @@ pub fn TxOutput(tx_output: TxOutputState) -> impl IntoView {
                 rows=1
                 value=script_pubkey
                 format=script_format
+                network=ctx.network
                 placeholder=move || {
                     match script_format() {
                         ScriptDisplayFormat::Addr => "Address",

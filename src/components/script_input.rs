@@ -1,6 +1,7 @@
 use bitcoincash::{hashes::hex::ToHex, Network, Script};
 use leptos::{
-    component, event_target_value, view, IntoView, MaybeProp, RwSignal, SignalSet, TextProp,
+    component, event_target_value, view, IntoView, MaybeProp, ReadSignal, RwSignal, SignalGet,
+    SignalSet, TextProp,
 };
 
 use crate::{
@@ -78,6 +79,7 @@ str_enum! {
 pub fn ScriptInput(
     value: RwSignal<ScriptInputValue>,
     format: RwSignal<ScriptDisplayFormat>,
+    network: ReadSignal<Network>,
     #[prop(into, default=Default::default())] disabled: MaybeProp<bool>,
     #[prop(into, default=Default::default())] rows: MaybeProp<u32>,
     #[prop(into, default=Default::default())] placeholder: TextProp,
@@ -121,7 +123,7 @@ pub fn ScriptInput(
                         return e.to_string();
                     }
                 };
-                match script_to_cash_addr(&script, Network::Bitcoin) {
+                match script_to_cash_addr(&script, network.get()) {
                     Ok(a) => {
                         error.set(false);
                         a
