@@ -93,11 +93,12 @@ pub struct TxInputState {
     pub utxo_pubkey: RwSignal<UtxoPubkeyData>,
     pub utxo_amount: RwSignal<u64>,
     pub token_data_state: TokenDataState,
+    pub index: RwSignal<usize>,
     pub key: usize,
 }
 
 impl TxInputState {
-    pub fn new(key: usize) -> Self {
+    pub fn new(key: usize, index: usize) -> Self {
         Self {
             txid: RwSignal::default(),
             vout: RwSignal::new(0),
@@ -108,6 +109,7 @@ impl TxInputState {
             utxo_pubkey: RwSignal::default(),
             utxo_amount: RwSignal::new(0),
             token_data_state: TokenDataState::new(key),
+            index: RwSignal::new(index),
             key,
         }
     }
@@ -123,6 +125,7 @@ impl TxInputState {
             utxo_pubkey,
             utxo_amount,
             token_data_state,
+            index,
             key: _,
         } = self;
         txid.dispose();
@@ -134,6 +137,7 @@ impl TxInputState {
         utxo_pubkey.dispose();
         utxo_amount.dispose();
         token_data_state.dispose();
+        index.dispose();
     }
 
     pub fn update_from_txin(&self, input: &MaybeUnsignedTxIn) {

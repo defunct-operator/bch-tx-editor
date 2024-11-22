@@ -62,9 +62,9 @@ fn main() {
 #[component]
 fn App() -> impl IntoView {
     let secp = StoredValue::new(Secp256k1::new());
-    let network = RwSignal::new(Network::Bitcoin); // TODO: make the actual selector
-    let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
-    let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
+    let network = RwSignal::new(Network::Bitcoin);
+    let tx_inputs = RwSignal::new(vec![TxInputState::new(0, 0)]);
+    let tx_outputs = RwSignal::new(vec![TxOutputState::new(0, 0)]);
     let tx_version = RwSignal::new(2i32);
     let tx_locktime = RwSignal::new(0u32);
     let tx_hex = RwSignal::new(String::new());
@@ -80,12 +80,12 @@ fn App() -> impl IntoView {
     let new_tx_input = move || {
         let id = tx_input_id();
         tx_input_id.set(id + 1);
-        tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id)));
+        tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id, tx_inputs.len())));
     };
     let new_tx_output = move || {
         let id = tx_output_id();
         tx_output_id.set(id + 1);
-        tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id)));
+        tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id, tx_outputs.len())));
     };
     let delete_tx_input = move |key_to_remove| {
         tx_inputs.update(|tx_inputs| {
@@ -97,6 +97,9 @@ fn App() -> impl IntoView {
                 .0;
             let removed = tx_inputs.remove(index_to_remove);
             removed.dispose();
+            for (i, tx) in tx_inputs.iter().enumerate().skip(index_to_remove) {
+                tx.index.set(i);
+            }
         });
     };
     let delete_tx_output = move |key_to_remove| {
@@ -109,6 +112,9 @@ fn App() -> impl IntoView {
                 .0;
             let removed = tx_outputs.remove(index_to_remove);
             removed.dispose();
+            for (i, tx) in tx_outputs.iter().enumerate().skip(index_to_remove) {
+                tx.index.set(i);
+            }
         });
     };
     let serialize_tx = move || -> Result<String> {
@@ -222,7 +228,7 @@ fn App() -> impl IntoView {
     };
 
     view! {
-        <div class="flex gap-3">
+        <div class="flex gap-3 justify-between">
             <div class="table">
                 <div class="table-row">
                     <div class="table-cell pr-1 pb-1">
@@ -241,7 +247,7 @@ fn App() -> impl IntoView {
                     </div>
                 </div>
             </div>
-            <div class="table ml-auto">
+            <div class="table">
                 <div class="table-row">
                     <div class="table-cell pr-1">
                         <label for="tx_locktime">Network:</label>
@@ -279,12 +285,15 @@ fn App() -> impl IntoView {
                             view! {
                                 <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
                                     <TxInput tx_input secp ctx/>
-                                    <button
-                                        on:click=move |_| delete_tx_input(tx_input.key)
-                                        class="border border-solid rounded border-stone-600 px-2 bg-red-950"
-                                    >
-                                        "−"
-                                    </button>
+                                    <div class="flex justify-between">
+                                        <button
+                                            on:click=move |_| delete_tx_input(tx_input.key)
+                                            class="border border-solid rounded border-stone-600 px-2 bg-red-950"
+                                        >
+                                            "−"
+                                        </button>
+                                        <span class="text-sm mr-4">"#"{tx_input.index}</span>
+                                    </div>
                                 </li>
                             }
                         }
@@ -310,10 +319,13 @@ fn App() -> impl IntoView {
                             view! {
                                 <li class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2">
                                     <TxOutput tx_output ctx/>
-                                    <button
-                                        on:click=move |_| delete_tx_output(tx_output.key)
-                                        class="border border-solid rounded border-stone-600 px-2 bg-red-950"
-                                    >"−"</button>
+                                    <div class="flex justify-between">
+                                        <button
+                                            on:click=move |_| delete_tx_output(tx_output.key)
+                                            class="border border-solid rounded border-stone-600 px-2 bg-red-950"
+                                        >"−"</button>
+                                        <span class="text-sm mr-4">"#"{tx_output.index}</span>
+                                    </div>
                                 </li>
                             }
                         }
