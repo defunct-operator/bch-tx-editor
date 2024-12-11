@@ -1,7 +1,11 @@
 use bitcoincash::{hashes::hex::ToHex, Network, Script};
 use leptos::{
-    component, event_target_value, view, IntoView, MaybeProp, ReadSignal, RwSignal, SignalGet,
-    SignalSet, TextProp,
+    component,
+    prelude::{
+        event_target_value, ClassAttribute, Get, GlobalAttributes, MaybeProp, OnAttribute,
+        PropAttribute, ReadSignal, RwSignal, Set,
+    },
+    view, IntoView,
 };
 
 use crate::{
@@ -81,8 +85,6 @@ pub fn ScriptInput(
     format: RwSignal<ScriptDisplayFormat>,
     network: ReadSignal<Network>,
     #[prop(into, default=Default::default())] disabled: MaybeProp<bool>,
-    #[prop(into, default=Default::default())] rows: MaybeProp<u32>,
-    #[prop(into, default=Default::default())] placeholder: TextProp,
 ) -> impl IntoView {
     let error = RwSignal::new(false);
     let disabled = move || disabled().unwrap_or(false);
@@ -140,7 +142,6 @@ pub fn ScriptInput(
     view! {
         <textarea
             spellcheck="false"
-            rows=rows
             on:change=move |e| {
                 match format() {
                     ScriptDisplayFormat::Hex => {
@@ -155,7 +156,6 @@ pub fn ScriptInput(
                 }
             }
             class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
-            placeholder=move || placeholder.get()
             prop:value=render_value
             disabled=move || error() || disabled()
             class=("text-red-700", error)

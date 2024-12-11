@@ -2,10 +2,12 @@ use anyhow::Result;
 use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::secp256k1::{Secp256k1, Verification};
 use bitcoincash::{OutPoint, Script, Sequence, TxIn};
-use leptos::{
-    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show,
-    SignalDispose, SignalGet, SignalSet, SignalUpdate, StoredValue,
+use leptos::prelude::{
+    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, Dispose, ElementChild,
+    Get, GlobalAttributes, OnAttribute, PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue,
+    Write,
 };
+use leptos::{component, view, IntoView};
 
 use super::script_input::ScriptInputValue;
 use crate::components::script_input::{ScriptDisplayFormat, ScriptInput};
@@ -156,7 +158,7 @@ impl TxInputState {
                 self.token_data_state.update_from_token_data(None);
             }
             MaybeUnsignedTxIn::Unsigned(txin) => {
-                self.script_sig.update(ScriptInputValue::clear);
+                self.script_sig.write().clear();
                 self.script_sig_format.set(ScriptDisplayFormat::Hex);
                 self.unsigned.set(true);
                 self.utxo_pubkey.set(UtxoPubkeyData::Hex(
@@ -229,8 +231,8 @@ pub fn TxInput<C: Verification + 'static>(
     let utxo_pubkey_enabled = RwSignal::new(true);
     let utxo_pubkey_error = RwSignal::new(false);
 
-    let parsed_input_seq_id = StoredValue::new(format!("tx-input-sn-{}", tx_input.key));
-    let parsed_input_val_id = StoredValue::new(format!("tx-input-val-{}", tx_input.key));
+    let parsed_input_seq_id = move || format!("tx-input-sn-{}", tx_input.key);
+    let parsed_input_val_id = move || format!("tx-input-val-{}", tx_input.key);
 
     let render_utxo_pubkey = move || {
         let utxo_pubkey = utxo_pubkey();
@@ -282,7 +284,7 @@ pub fn TxInput<C: Verification + 'static>(
                         return e.to_string();
                     }
                 };
-                let Some(script) = secp.with_value(|s| script.script_pubkey(s)) else {
+                let Some(script) = script.script_pubkey(&secp.read_value()) else {
                     utxo_pubkey_enabled.set(false);
                     utxo_pubkey_error.set(true);
                     return "Unknown address".into();
@@ -315,7 +317,7 @@ pub fn TxInput<C: Verification + 'static>(
                 placeholder="Transaction ID"
             />
             <span>:</span>
-            <ParsedInput value=tx_input.vout placeholder="Index" class="w-16" id=""/>
+            <ParsedInput value=tx_input.vout {..} placeholder="Index" class=("w-16", true) id=""/>
         </div>
         <div class="mb-1 flex">
             <ScriptInput
@@ -323,7 +325,7 @@ pub fn TxInput<C: Verification + 'static>(
                 format=script_sig_format
                 network=ctx.network
                 disabled=unsigned
-                placeholder=move || {
+                attr:placeholder=move || {
                     match script_sig_format() {
                         ScriptDisplayFormat::Addr => "How did you make this happen?",
                         ScriptDisplayFormat::Hex => "Unlocking Script Hex",
@@ -347,7 +349,7 @@ pub fn TxInput<C: Verification + 'static>(
         </div>
         <div class="my-1">
             <label class="mr-1" for=parsed_input_seq_id>Sequence Number:</label>
-            <ParsedInput id=parsed_input_seq_id value=tx_input.sequence placeholder="Sequence"/>
+            <ParsedInput value=tx_input.sequence {..} id=parsed_input_seq_id placeholder="Sequence"/>
             <label>
                 <input
                     type="checkbox"
@@ -411,7 +413,7 @@ pub fn TxInput<C: Verification + 'static>(
             // Amount
             <div class="my-1">
                 <label class="mr-1" for=parsed_input_val_id>Sats:</label>
-                <ParsedInput id=parsed_input_val_id value=tx_input.utxo_amount placeholder="Sats" class="w-52"/>
+                <ParsedInput value=tx_input.utxo_amount {..} placeholder="Sats" id=parsed_input_val_id class=("w-52", true)/>
                 <label>
                     <input
                         type="checkbox"

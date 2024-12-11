@@ -7,8 +7,13 @@ use bitcoincash::{
     TokenID,
 };
 use leptos::{
-    component, event_target_checked, event_target_value, view, IntoView, RwSignal, Show, Signal,
-    SignalDispose, SignalGet, SignalSet, SignalUpdate, SignalWith, StoredValue,
+    component,
+    prelude::{
+        event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, Dispose,
+        ElementChild, Get, GlobalAttributes, OnAttribute, PropAttribute, Read, RwSignal, Set, Show,
+        Write,
+    },
+    view, IntoView,
 };
 
 use crate::{components::ParsedInput, macros::StrEnum};
@@ -110,8 +115,8 @@ impl TokenDataState {
                     true => self.nft_capability.get().into(),
                     false => Capability::None,
                 };
-                let commitment: Vec<u8> = match has_nft {
-                    true => self.nft_commitment_hex.with(|h| <_>::from_hex(h))?,
+                let commitment = match has_nft {
+                    true => Vec::from_hex(&self.nft_commitment_hex.read())?,
                     false => vec![],
                 };
                 let mut structure = 0;
@@ -125,7 +130,7 @@ impl TokenDataState {
                     structure |= Structure::HasCommitmentLength as u8;
                 }
                 Some(OutputData {
-                    id: self.category_id.with(|h| TokenID::from_hex(h))?,
+                    id: TokenID::from_hex(&self.category_id.read())?,
                     bitfield: structure | capability as u8,
                     amount: ft_amount,
                     commitment,
@@ -138,12 +143,12 @@ impl TokenDataState {
         match token_data {
             None => {
                 self.cashtoken_enabled.set(false);
-                self.category_id.update(String::clear);
+                self.category_id.write().clear();
                 self.has_ft_amount.set(false);
                 self.ft_amount.set(0);
                 self.has_nft.set(false);
                 self.nft_capability.set(NftCapability::default());
-                self.nft_commitment_hex.update(String::clear);
+                self.nft_commitment_hex.write().clear();
                 self.nft_commitment_format
                     .set(NftCommitmentFormat::default());
             }
@@ -168,13 +173,13 @@ impl TokenDataState {
                     if token_data.has_commitment_length() {
                         self.nft_commitment_hex.set(token_data.commitment.to_hex());
                     } else {
-                        self.nft_commitment_hex.update(String::clear);
+                        self.nft_commitment_hex.write().clear();
                     }
                     self.nft_commitment_format
                         .set(NftCommitmentFormat::default());
                 } else {
                     self.nft_capability.set(NftCapability::default());
-                    self.nft_commitment_hex.update(String::clear);
+                    self.nft_commitment_hex.write().clear();
                     self.nft_commitment_format
                         .set(NftCommitmentFormat::default());
                 }
@@ -195,8 +200,8 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
     let nft_commitment_error = RwSignal::new(false);
     let nft_commitment_lossy = RwSignal::new(false);
 
-    let parsed_input_ft_id = StoredValue::new(format!("tx-output-ft-{}", token_data.key));
-    let input_category_id = StoredValue::new(format!("tx-output-cat-{}", token_data.key));
+    let parsed_input_ft_id = move || format!("tx-output-ft-{}", token_data.key);
+    let input_category_id = move || format!("tx-output-cat-{}", token_data.key);
 
     view! {
         <Show when=cashtoken_enabled>
@@ -233,10 +238,12 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                     Amount:
                 </label>
                 <ParsedInput
-                    id=parsed_input_ft_id
                     value=token_data.ft_amount
-                    class="w-52 disabled:opacity-30"
-                    disabled=Signal::derive(move || !has_ft_amount())
+                    {..}
+                    id=parsed_input_ft_id
+                    disabled={move || !has_ft_amount()}
+                    class=("w-52", true)
+                    class=("disabled:opacity-30", true)
                 />
             </div>
 
@@ -296,7 +303,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                         nft_commitment_hex()
                                     }
                                     NftCommitmentFormat::Plaintext => 'a: {
-                                        let bytes = match nft_commitment_hex.with(|h| Vec::from_hex(h)) {
+                                        let bytes = match Vec::from_hex(&nft_commitment_hex.read()) {
                                             Ok(b) => b,
                                             Err(e) => {
                                                 nft_commitment_error.set(true);

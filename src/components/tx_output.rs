@@ -1,9 +1,10 @@
 use anyhow::Result;
 use bitcoincash::TxOut;
-use leptos::{
-    component, event_target_checked, event_target_value, view, IntoView, RwSignal, SignalDispose,
-    SignalGet, SignalSet,
+use leptos::prelude::{
+    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, Dispose, ElementChild,
+    Get, OnAttribute, PropAttribute, RwSignal, Set,
 };
+use leptos::{component, view, IntoView};
 
 use crate::{
     components::{
@@ -79,10 +80,11 @@ pub fn TxOutput(tx_output: TxOutputState, ctx: Context) -> impl IntoView {
         // Address
         <div class="mb-1 flex">
             <ScriptInput
-                rows=1
                 value=script_pubkey
                 format=script_format
                 network=ctx.network
+                {..}
+                rows=1
                 placeholder=move || {
                     match script_format() {
                         ScriptDisplayFormat::Addr => "Address",
@@ -109,7 +111,7 @@ pub fn TxOutput(tx_output: TxOutputState, ctx: Context) -> impl IntoView {
         // Amount
         <div class="my-1">
             <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
-            <ParsedInput id=parsed_input_val_id value=tx_output.value placeholder="Sats" class="w-52"/>
+            <ParsedInput value=tx_output.value {..} id=parsed_input_val_id placeholder="Sats" class=("w-52", true)/>
             <label>
                 <input
                     type="checkbox"

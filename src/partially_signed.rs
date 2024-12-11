@@ -74,7 +74,6 @@ impl UnsignedScriptSig {
         let Instruction::PushBytes(first_push) = iter.next()?.ok()? else {
             return None;
         };
-        leptos::logging::log!("{first_push:?}");
         if first_push.is_empty() {
             // multisig
             let Instruction::PushBytes(fake_redeem_script) = iter.last()?.ok()? else {

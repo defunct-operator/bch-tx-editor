@@ -7,22 +7,20 @@ pub mod js_reexport;
 pub mod partially_signed;
 pub mod util;
 
-use std::time::Duration;
-
 use anyhow::Result;
 use bitcoincash::consensus::encode;
 use bitcoincash::hashes::hex::{FromHex, ToHex};
-use bitcoincash::hashes::sha256;
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
-use bitcoincash::secp256k1::{rand, Message, Secp256k1};
-use bitcoincash::{KeyPair, Network, PackedLockTime, Transaction};
+use bitcoincash::secp256k1::Secp256k1;
+use bitcoincash::{Network, PackedLockTime, Transaction};
 use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use components::ParsedInput;
-use leptos::{
-    component, event_target_value, logging::log, mount_to_body, view, For, IntoView, SignalGet,
-    SignalSet, SignalUpdate, SignalWith,
+use leptos::prelude::{
+    event_target_value, mount_to_body, AddAnyAttr, ClassAttribute, ElementChild, For, Get,
+    GlobalAttributes, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal, Set, StoredValue,
+    Write,
 };
-use leptos::{update, ReadSignal, RwSignal, StoredValue};
+use leptos::{component, logging::log, view, IntoView};
 use macros::StrEnum;
 
 use crate::components::tx_input::{TxInput, TxInputState};
@@ -77,61 +75,55 @@ fn App() -> impl IntoView {
         network: network.read_only(),
     };
 
-    let new_tx_input = move || {
+    let new_tx_input = move |t: &mut Vec<TxInputState>| {
         let id = tx_input_id();
         tx_input_id.set(id + 1);
-        tx_inputs.update(|tx_inputs| tx_inputs.push(TxInputState::new(id, tx_inputs.len())));
+        t.push(TxInputState::new(id, t.len()));
     };
-    let new_tx_output = move || {
+    let new_tx_output = move |t: &mut Vec<TxOutputState>| {
         let id = tx_output_id();
         tx_output_id.set(id + 1);
-        tx_outputs.update(|tx_outputs| tx_outputs.push(TxOutputState::new(id, tx_outputs.len())));
+        t.push(TxOutputState::new(id, t.len()));
     };
     let delete_tx_input = move |key_to_remove| {
-        tx_inputs.update(|tx_inputs| {
-            let index_to_remove = tx_inputs
-                .iter()
-                .enumerate()
-                .find(|(_, t)| t.key == key_to_remove)
-                .unwrap()
-                .0;
-            let removed = tx_inputs.remove(index_to_remove);
-            removed.dispose();
-            for (i, tx) in tx_inputs.iter().enumerate().skip(index_to_remove) {
-                tx.index.set(i);
-            }
-        });
+        let mut tx_inputs = tx_inputs.write();
+        let index_to_remove = tx_inputs
+            .iter()
+            .enumerate()
+            .find(|(_, t)| t.key == key_to_remove)
+            .unwrap()
+            .0;
+        let removed = tx_inputs.remove(index_to_remove);
+        removed.dispose();
+        for (i, tx) in tx_inputs.iter().enumerate().skip(index_to_remove) {
+            tx.index.set(i);
+        }
     };
     let delete_tx_output = move |key_to_remove| {
-        tx_outputs.update(|tx_outputs| {
-            let index_to_remove = tx_outputs
-                .iter()
-                .enumerate()
-                .find(|(_, t)| t.key == key_to_remove)
-                .unwrap()
-                .0;
-            let removed = tx_outputs.remove(index_to_remove);
-            removed.dispose();
-            for (i, tx) in tx_outputs.iter().enumerate().skip(index_to_remove) {
-                tx.index.set(i);
-            }
-        });
+        let mut tx_outputs = tx_outputs.write();
+        let index_to_remove = tx_outputs
+            .iter()
+            .enumerate()
+            .find(|(_, t)| t.key == key_to_remove)
+            .unwrap()
+            .0;
+        let removed = tx_outputs.remove(index_to_remove);
+        removed.dispose();
+        for (i, tx) in tx_outputs.iter().enumerate().skip(index_to_remove) {
+            tx.index.set(i);
+        }
     };
     let serialize_tx = move || -> Result<String> {
-        let input: Result<_, _> = tx_inputs.with(|tx_inputs| {
-            tx_inputs
-                .iter()
-                .map(|&tx_input| tx_input.try_into())
-                .collect()
-        });
-        let input = input?;
-        let output: Result<_, _> = tx_outputs.with(|tx_outputs| {
-            tx_outputs
-                .iter()
-                .map(|&tx_output| tx_output.try_into())
-                .collect()
-        });
-        let output = output?;
+        let input = tx_inputs
+            .read()
+            .iter()
+            .map(|&tx_input| tx_input.try_into())
+            .collect::<Result<_, _>>()?;
+        let output = tx_outputs
+            .read()
+            .iter()
+            .map(|&tx_output| tx_output.try_into())
+            .collect::<Result<_, _>>()?;
         let tx = PartiallySignedTransaction {
             version: tx_version.get(),
             lock_time: PackedLockTime(tx_locktime.get()),
@@ -139,90 +131,83 @@ fn App() -> impl IntoView {
             output,
         };
         let tx_serialized = tx.serialize();
-        if serialize_message.with(|s| s.is_empty() || s.ends_with('.')) {
-            serialize_message.set(format!("{} bytes", tx_serialized.len()));
+        let mut sm = serialize_message.write();
+        if sm.is_empty() || sm.ends_with('.') {
+            *sm = format!("{} bytes", tx_serialized.len());
         } else {
-            serialize_message.set(format!("{} bytes.", tx_serialized.len()));
+            *sm = format!("{} bytes.", tx_serialized.len());
         }
         Ok(tx_serialized.to_hex())
     };
     let deserialize_tx = move || -> Result<()> {
         serialize_message.set(String::new());
-        let hex = tx_hex.with(|t| Vec::from_hex(t))?;
+        let hex = Vec::from_hex(&tx_hex.read())?;
         let tx = PartiallySignedTransaction::deserialize(&hex)
             .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
+        let mut tx_inputs = tx_inputs.write();
+        let mut tx_outputs = tx_outputs.write();
 
-        let mut current_input_len = 0;
-        tx_inputs.update(|tx_inputs| {
-            if tx_inputs.len() > tx.input.len() {
-                for tx_input in tx_inputs.drain(tx.input.len()..) {
-                    tx_input.dispose();
-                }
+        if tx_inputs.len() > tx.input.len() {
+            for tx_input in tx_inputs.drain(tx.input.len()..) {
+                tx_input.dispose();
             }
-            current_input_len = tx_inputs.len();
-        });
-        let mut current_output_len = 0;
-        tx_outputs.update(|tx_outputs| {
-            if tx_outputs.len() > tx.output.len() {
-                for tx_output in tx_outputs.drain(tx.output.len()..) {
-                    tx_output.dispose();
-                }
-            }
-            current_output_len = tx_outputs.len();
-        });
-
-        for _ in current_input_len..tx.input.len() {
-            new_tx_input();
         }
-        for _ in current_output_len..tx.output.len() {
-            new_tx_output();
+
+        if tx_outputs.len() > tx.output.len() {
+            for tx_output in tx_outputs.drain(tx.output.len()..) {
+                tx_output.dispose();
+            }
+        }
+
+        for _ in tx_inputs.len()..tx.input.len() {
+            new_tx_input(&mut tx_inputs);
+        }
+        for _ in tx_outputs.len()..tx.output.len() {
+            new_tx_output(&mut tx_outputs);
         }
 
         tx_version.set(tx.version);
         tx_locktime.set(tx.lock_time.0);
 
-        tx_inputs.with(|tx_inputs| {
-            for (i, input) in tx.input.iter().enumerate() {
-                tx_inputs[i].update_from_txin(input);
-            }
-        });
+        for (i, input) in tx.input.iter().enumerate() {
+            tx_inputs[i].update_from_txin(input);
+        }
 
-        tx_outputs.with(|tx_outputs| {
-            for (i, output) in tx.output.iter().enumerate() {
-                let script_pubkey_hex = output.script_pubkey.to_hex();
-                if script_pubkey_hex.starts_with("6a") {
-                    // OP_RETURN script
-                    tx_outputs[i]
-                        .script_display_format
-                        .set(ScriptDisplayFormat::Asm);
-                } else {
-                    tx_outputs[i]
-                        .script_display_format
-                        .set(ScriptDisplayFormat::Addr);
-                }
+        for (i, output) in tx.output.iter().enumerate() {
+            let script_pubkey_hex = output.script_pubkey.to_hex();
+            if script_pubkey_hex.starts_with("6a") {
+                // OP_RETURN script
                 tx_outputs[i]
-                    .script_pubkey
-                    .set(ScriptInputValue::Hex(script_pubkey_hex));
-                tx_outputs[i].value.set(output.value);
-
+                    .script_display_format
+                    .set(ScriptDisplayFormat::Asm);
+            } else {
                 tx_outputs[i]
-                    .token_data_state
-                    .update_from_token_data(output.token.as_ref());
+                    .script_display_format
+                    .set(ScriptDisplayFormat::Addr);
             }
-        });
+            tx_outputs[i]
+                .script_pubkey
+                .set(ScriptInputValue::Hex(script_pubkey_hex));
+            tx_outputs[i].value.set(output.value);
+
+            tx_outputs[i]
+                .token_data_state
+                .update_from_token_data(output.token.as_ref());
+        }
         Ok(())
     };
     let reset = move |_| {
-        update!(|tx_inputs, tx_outputs| {
-            for tx_input in tx_inputs.drain(..) {
-                tx_input.dispose();
-            }
-            for tx_output in tx_outputs.drain(..) {
-                tx_output.dispose();
-            }
-        });
-        new_tx_input();
-        new_tx_output();
+        let tx_inputs = &mut *tx_inputs.write();
+        let tx_outputs = &mut *tx_outputs.write();
+
+        for tx_input in tx_inputs.drain(..) {
+            tx_input.dispose();
+        }
+        for tx_output in tx_outputs.drain(..) {
+            tx_output.dispose();
+        }
+        new_tx_input(tx_inputs);
+        new_tx_output(tx_outputs);
         tx_version.set(2);
         tx_locktime.set(0);
     };
@@ -235,7 +220,7 @@ fn App() -> impl IntoView {
                         <label for="tx_version">TX version:</label>
                     </div>
                     <div class="table-cell pb-1">
-                        <ParsedInput id="tx_version" value=tx_version placeholder="2"/>
+                        <ParsedInput value={tx_version} {..} id="tx_version" placeholder="2"/>
                     </div>
                 </div>
                 <div class="table-row">
@@ -243,7 +228,7 @@ fn App() -> impl IntoView {
                         <label for="tx_locktime">Locktime:</label>
                     </div>
                     <div class="table-cell">
-                        <ParsedInput id="tx_locktime" value=tx_locktime placeholder="0"/>
+                        <ParsedInput value={tx_locktime} {..} id="tx_locktime" placeholder="0"/>
                     </div>
                 </div>
             </div>
@@ -276,12 +261,12 @@ fn App() -> impl IntoView {
                 <p class="mb-1">Inputs</p>
                 <ol start="0">
                     <For
-                        each=move || 0..tx_inputs.with(Vec::len)
-                        key=move |i| tx_inputs.with(|v| v[*i].key)
+                        each=move || 0..tx_inputs.read().len()
+                        key=move |i| tx_inputs.read()[*i].key
                         let:i
                     >
                         {
-                            let tx_input = tx_inputs.with(|v| v[i]);
+                            let tx_input = tx_inputs.read()[i];
                             view! {
                                 <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
                                     <TxInput tx_input secp ctx/>
@@ -300,7 +285,7 @@ fn App() -> impl IntoView {
                     </For>
                 </ol>
                 <button
-                    on:click=move |_| new_tx_input()
+                    on:click=move |_| new_tx_input(&mut tx_inputs.write())
                     class="border border-solid rounded border-stone-600 px-2"
                 >
                     "+"
@@ -310,12 +295,12 @@ fn App() -> impl IntoView {
                 <p class="mb-1">Outputs</p>
                 <ol start="0">
                     <For
-                        each=move || 0..tx_outputs.with(Vec::len)
-                        key=move |i| tx_outputs.with(|v| v[*i].key)
+                        each=move || 0..tx_outputs.read().len()
+                        key=move |i| tx_outputs.read()[*i].key
                         let:i
                     >
                         {
-                            let tx_output = tx_outputs.with(|v| v[i]);
+                            let tx_output = tx_outputs.read()[i];
                             view! {
                                 <li class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2">
                                     <TxOutput tx_output ctx/>
@@ -332,7 +317,7 @@ fn App() -> impl IntoView {
                     </For>
                 </ol>
                 <button
-                    on:click=move |_| new_tx_output()
+                    on:click=move |_| new_tx_output(&mut tx_outputs.write())
                     class="border border-solid rounded border-stone-600 px-2"
                 >
                     "+"
@@ -439,42 +424,45 @@ struct Context {
 //     });
 // }
 
-#[component]
-fn AsyncCounter() -> impl IntoView {
-    let count = RwSignal::new(0);
-    let async_task = || async move {
-        loop {
-            gloo::timers::future::sleep(Duration::from_secs(1)).await;
-            count.update(|x| *x += 1);
-        }
-    };
-    leptos::spawn_local(async_task());
-    view! { <p>{count}</p> }
-}
+// #[component]
+// fn AsyncCounter() -> impl IntoView {
+//     let count = RwSignal::new(0);
+//     let async_task = || async move {
+//         loop {
+//             gloo::timers::future::sleep(Duration::from_secs(1)).await;
+//             count.update(|x| *x += 1);
+//         }
+//     };
+//     leptos::spawn_local(async_task());
+//     view! { <p>{count}</p> }
+// }
 
-#[component]
-fn SimpleWallet() -> impl IntoView {
-    let secp = Secp256k1::new();
-    let mut rng = rand::thread_rng();
-    let keypair = KeyPair::new(&secp, &mut rng);
-
-    let value = RwSignal::new(String::new());
-    let pubkey = keypair.public_key().to_string();
-
-    view! {
-        <p>"Public key: " {pubkey}</p>
-        <p>
-            "Message to sign: "
-            <input
-                on:change=move |e| value.set(event_target_value(&e))
-            />
-        </p>
-        <p>
-            "Signature: "
-            {move || {
-                let sig = secp.sign_ecdsa(&Message::from_hashed_data::<sha256::Hash>(value().as_bytes()), &keypair.secret_key());
-                sig.to_string()
-            }}
-        </p>
-    }
-}
+// use bitcoincash::hashes::sha256;
+// use bitcoincash::secp256k1::{rand, Message};
+// use bitcoincash::KeyPair;
+// #[component]
+// fn SimpleWallet() -> impl IntoView {
+//     let secp = Secp256k1::new();
+//     let mut rng = rand::thread_rng();
+//     let keypair = KeyPair::new(&secp, &mut rng);
+//
+//     let value = RwSignal::new(String::new());
+//     let pubkey = keypair.public_key().to_string();
+//
+//     view! {
+//         <p>"Public key: " {pubkey}</p>
+//         <p>
+//             "Message to sign: "
+//             <input
+//                 on:change=move |e| value.set(event_target_value(&e))
+//             />
+//         </p>
+//         <p>
+//             "Signature: "
+//             {move || {
+//                 let sig = secp.sign_ecdsa(&Message::from_hashed_data::<sha256::Hash>(value().as_bytes()), &keypair.secret_key());
+//                 sig.to_string()
+//             }}
+//         </p>
+//     }
+// }

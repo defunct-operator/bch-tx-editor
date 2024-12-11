@@ -1,8 +1,12 @@
 use std::str::FromStr;
 
 use leptos::{
-    component, event_target_value, view, IntoAttribute, IntoProperty, IntoView, MaybeProp,
-    ReadSignal, RwSignal, SignalSet,
+    component,
+    prelude::{
+        event_target_value, ClassAttribute, OnAttribute, PropAttribute, ReadSignal, RwSignal, Set,
+    },
+    tachys::html::property::IntoProperty,
+    view, IntoView,
 };
 
 pub mod script_input;
@@ -12,13 +16,7 @@ pub mod tx_input;
 pub mod tx_output;
 
 #[component]
-pub fn ParsedInput<T: FromStr + Clone + 'static, I: IntoAttribute>(
-    value: RwSignal<T>,
-    #[prop(default = "")] placeholder: &'static str,
-    #[prop(default = "")] class: &'static str,
-    id: I,
-    #[prop(into, default=Default::default())] disabled: MaybeProp<bool>,
-) -> impl IntoView
+pub fn ParsedInput<T: FromStr + Clone + Send + Sync + 'static>(value: RwSignal<T>) -> impl IntoView
 where
     ReadSignal<T>: IntoProperty,
 {
@@ -40,12 +38,9 @@ where
                 }
             }
             prop:value=thevalue
-            class={move || format!("border border-solid rounded px-1 bg-stone-900 placeholder:text-stone-600 {}", class)}
+            class="border border-solid rounded px-1 bg-stone-900 placeholder:text-stone-600"
             class=("border-stone-600", parse_success)
             class=("border-red-700", move || !parse_success())
-            placeholder=placeholder
-            disabled=disabled
-            id=id
         />
     }
 }
