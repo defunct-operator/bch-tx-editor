@@ -2,7 +2,7 @@
 minify = "on_release"
 
 [watch]
-ignore = ["js-reexport/dist"]
+ignore = ["js-reexport/dist/reexports.js"]
 
 [[hooks]]
 stage = "pre_build"

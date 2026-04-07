@@ -106,7 +106,7 @@ impl TxInputState {
             vout: RwSignal::new(0),
             sequence: RwSignal::new(4294967294),
             script_sig: RwSignal::default(),
-            script_sig_format: RwSignal::new(ScriptDisplayFormat::Hex),
+            script_sig_format: RwSignal::new(ScriptDisplayFormat::Asm),
             unsigned: RwSignal::new(false),
             utxo_pubkey: RwSignal::default(),
             utxo_amount: RwSignal::new(0),
@@ -151,7 +151,7 @@ impl TxInputState {
             MaybeUnsignedTxIn::Signed(txin) => {
                 self.script_sig
                     .set(ScriptInputValue::Hex(txin.script_sig.to_hex()));
-                self.script_sig_format.set(ScriptDisplayFormat::Hex);
+                self.script_sig_format.set(ScriptDisplayFormat::Asm);
                 self.unsigned.set(false);
                 self.utxo_pubkey.set(Default::default());
                 self.utxo_amount.set(0);
@@ -332,6 +332,8 @@ pub fn TxInput<C: Verification + 'static>(
                         ScriptDisplayFormat::Asm => "Unlocking Script Asm",
                     }
                 }
+                {..}
+                class=("text-xs", true)
             />
             <div>
                 <select
@@ -342,8 +344,8 @@ pub fn TxInput<C: Verification + 'static>(
                     prop:value={move || script_sig_format().to_str()}
                     disabled=unsigned
                 >
-                    <option value={ScriptDisplayFormat::Asm.to_str()}>Asm</option>
-                    <option value={ScriptDisplayFormat::Hex.to_str()} selected>Hex</option>
+                    <option value={ScriptDisplayFormat::Asm.to_str()} selected>Asm</option>
+                    <option value={ScriptDisplayFormat::Hex.to_str()}>Hex</option>
                 </select>
             </div>
         </div>

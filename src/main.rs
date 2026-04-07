@@ -18,7 +18,7 @@ use components::ParsedInput;
 use leptos::prelude::{
     event_target_value, mount_to_body, AddAnyAttr, ClassAttribute, ElementChild, For, Get,
     GlobalAttributes, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal, Set, StoredValue,
-    Write,
+    With, Write,
 };
 use leptos::{component, logging::log, view, IntoView};
 use macros::StrEnum;
@@ -141,7 +141,9 @@ fn App() -> impl IntoView {
     };
     let deserialize_tx = move || -> Result<()> {
         serialize_message.set(String::new());
-        let hex = Vec::from_hex(&tx_hex.read())?;
+        let hex = tx_hex.with(|h| {
+            Vec::from_hex(&h.chars().filter(|c| !c.is_whitespace()).collect::<String>())
+        })?;
         let tx = PartiallySignedTransaction::deserialize(&hex)
             .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
         let mut tx_inputs = tx_inputs.write();
