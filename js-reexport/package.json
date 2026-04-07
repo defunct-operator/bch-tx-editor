@@ -6,9 +6,9 @@
     "build": "esbuild index.js --bundle --minify --format=esm --outfile=dist/reexports.js"
   },
   "dependencies": {
-    "@bitauth/libauth": "^2.1.0"
+    "@bitauth/libauth": "^3.0.0"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.28.0"
   }
 }

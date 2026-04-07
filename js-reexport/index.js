@@ -1,5 +1,5 @@
 // @ts-check
-import { cashAssemblyToBin, createCompilerBCH, disassembleBytecodeBCH } from '@bitauth/libauth';
+import { createCompilerBCH, disassembleBytecodeBCH } from '@bitauth/libauth';
 
 let reexports = {};
 
