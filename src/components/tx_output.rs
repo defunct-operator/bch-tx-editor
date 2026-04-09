@@ -22,18 +22,16 @@ pub struct TxOutputState {
     pub script_pubkey: RwSignal<ScriptInputValue>,
     pub script_display_format: RwSignal<ScriptDisplayFormat>,
     pub token_data_state: TokenDataState,
-    pub index: RwSignal<usize>,
     pub key: usize,
 }
 
 impl TxOutputState {
-    pub fn new(key: usize, index: usize) -> Self {
+    pub fn new(key: usize) -> Self {
         Self {
             value: RwSignal::new(0),
             script_pubkey: RwSignal::default(),
             script_display_format: RwSignal::new(ScriptDisplayFormat::Addr),
             token_data_state: TokenDataState::new(key),
-            index: RwSignal::new(index),
             key,
         }
     }
@@ -44,14 +42,12 @@ impl TxOutputState {
             script_pubkey,
             script_display_format,
             token_data_state,
-            index,
             key: _,
         } = self;
         value.dispose();
         script_pubkey.dispose();
         script_display_format.dispose();
         token_data_state.dispose();
-        index.dispose();
     }
 }
 

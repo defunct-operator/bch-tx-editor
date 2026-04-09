@@ -95,12 +95,11 @@ pub struct TxInputState {
     pub utxo_pubkey: RwSignal<UtxoPubkeyData>,
     pub utxo_amount: RwSignal<u64>,
     pub token_data_state: TokenDataState,
-    pub index: RwSignal<usize>,
     pub key: usize,
 }
 
 impl TxInputState {
-    pub fn new(key: usize, index: usize) -> Self {
+    pub fn new(key: usize) -> Self {
         Self {
             txid: RwSignal::default(),
             vout: RwSignal::new(0),
@@ -111,7 +110,6 @@ impl TxInputState {
             utxo_pubkey: RwSignal::default(),
             utxo_amount: RwSignal::new(0),
             token_data_state: TokenDataState::new(key),
-            index: RwSignal::new(index),
             key,
         }
     }
@@ -127,7 +125,6 @@ impl TxInputState {
             utxo_pubkey,
             utxo_amount,
             token_data_state,
-            index,
             key: _,
         } = self;
         txid.dispose();
@@ -139,7 +136,6 @@ impl TxInputState {
         utxo_pubkey.dispose();
         utxo_amount.dispose();
         token_data_state.dispose();
-        index.dispose();
     }
 
     pub fn update_from_txin(&self, input: &MaybeUnsignedTxIn) {
@@ -231,8 +227,8 @@ pub fn TxInput<C: Verification + 'static>(
     let utxo_pubkey_enabled = RwSignal::new(true);
     let utxo_pubkey_error = RwSignal::new(false);
 
-    let parsed_input_seq_id = move || format!("tx-input-sn-{}", tx_input.key);
-    let parsed_input_val_id = move || format!("tx-input-val-{}", tx_input.key);
+    let parsed_input_seq_id = format!("tx-input-sn-{}", tx_input.key);
+    let parsed_input_val_id = format!("tx-input-val-{}", tx_input.key);
 
     let render_utxo_pubkey = move || {
         let utxo_pubkey = utxo_pubkey();
@@ -334,6 +330,7 @@ pub fn TxInput<C: Verification + 'static>(
                 }
                 {..}
                 class=("text-xs", true)
+                class=("pt-[1px]", true)
             />
             <div>
                 <select
@@ -350,7 +347,7 @@ pub fn TxInput<C: Verification + 'static>(
             </div>
         </div>
         <div class="my-1">
-            <label class="mr-1" for=parsed_input_seq_id>Sequence Number:</label>
+            <label class="mr-1" for=parsed_input_seq_id.clone()>Sequence Number:</label>
             <ParsedInput value=tx_input.sequence {..} id=parsed_input_seq_id placeholder="Sequence"/>
             <label>
                 <input
@@ -405,17 +402,17 @@ pub fn TxInput<C: Verification + 'static>(
                         }
                         prop:value={move || pubkey_format().to_str()}
                     >
-                        <option value={|| PubkeyDisplayFormat::Addr.to_str()}>Address</option>
-                        <option value={|| PubkeyDisplayFormat::Asm.to_str()}>Asm</option>
-                        <option value={|| PubkeyDisplayFormat::Hex.to_str()}>Hex</option>
+                        <option value=PubkeyDisplayFormat::Addr.to_str()>Address</option>
+                        <option value=PubkeyDisplayFormat::Asm.to_str()>Asm</option>
+                        <option value=PubkeyDisplayFormat::Hex.to_str()>Hex</option>
                     </select>
                 </div>
             </div>
 
             // Amount
             <div class="my-1">
-                <label class="mr-1" for=parsed_input_val_id>Sats:</label>
-                <ParsedInput value=tx_input.utxo_amount {..} placeholder="Sats" id=parsed_input_val_id class=("w-52", true)/>
+                <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
+                <ParsedInput value=tx_input.utxo_amount {..} placeholder="Sats" class=("w-52", true) id=parsed_input_val_id.clone()/>
                 <label>
                     <input
                         type="checkbox"

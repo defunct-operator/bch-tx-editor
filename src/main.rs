@@ -16,7 +16,7 @@ use bitcoincash::{Network, PackedLockTime, Transaction};
 use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use components::ParsedInput;
 use leptos::prelude::{
-    event_target_value, mount_to_body, AddAnyAttr, ClassAttribute, ElementChild, For, Get,
+    event_target_value, mount_to_body, AddAnyAttr, ClassAttribute, ElementChild, ForEnumerate, Get,
     GlobalAttributes, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal, Set, StoredValue,
     With, Write,
 };
@@ -61,8 +61,8 @@ fn main() {
 fn App() -> impl IntoView {
     let secp = StoredValue::new(Secp256k1::new());
     let network = RwSignal::new(Network::Bitcoin);
-    let tx_inputs = RwSignal::new(vec![TxInputState::new(0, 0)]);
-    let tx_outputs = RwSignal::new(vec![TxOutputState::new(0, 0)]);
+    let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
+    let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
     let tx_version = RwSignal::new(2i32);
     let tx_locktime = RwSignal::new(0u32);
     let tx_hex = RwSignal::new(String::new());
@@ -78,12 +78,12 @@ fn App() -> impl IntoView {
     let new_tx_input = move |t: &mut Vec<TxInputState>| {
         let id = tx_input_id();
         tx_input_id.set(id + 1);
-        t.push(TxInputState::new(id, t.len()));
+        t.push(TxInputState::new(id));
     };
     let new_tx_output = move |t: &mut Vec<TxOutputState>| {
         let id = tx_output_id();
         tx_output_id.set(id + 1);
-        t.push(TxOutputState::new(id, t.len()));
+        t.push(TxOutputState::new(id));
     };
     let delete_tx_input = move |key_to_remove| {
         let mut tx_inputs = tx_inputs.write();
@@ -95,9 +95,6 @@ fn App() -> impl IntoView {
             .0;
         let removed = tx_inputs.remove(index_to_remove);
         removed.dispose();
-        for (i, tx) in tx_inputs.iter().enumerate().skip(index_to_remove) {
-            tx.index.set(i);
-        }
     };
     let delete_tx_output = move |key_to_remove| {
         let mut tx_outputs = tx_outputs.write();
@@ -109,9 +106,6 @@ fn App() -> impl IntoView {
             .0;
         let removed = tx_outputs.remove(index_to_remove);
         removed.dispose();
-        for (i, tx) in tx_outputs.iter().enumerate().skip(index_to_remove) {
-            tx.index.set(i);
-        }
     };
     let serialize_tx = move || -> Result<String> {
         let input = tx_inputs
@@ -259,13 +253,15 @@ fn App() -> impl IntoView {
             </div>
         </div>
         <div class="flex flex-wrap gap-3 mt-3">
+
+            // Inputs
             <div class="basis-[32rem] grow">
                 <p class="mb-1">Inputs</p>
                 <ol start="0">
-                    <For
+                    <ForEnumerate
                         each=move || 0..tx_inputs.read().len()
                         key=move |i| tx_inputs.read()[*i].key
-                        let:i
+                        let(index, i)
                     >
                         {
                             let tx_input = tx_inputs.read()[i];
@@ -279,12 +275,12 @@ fn App() -> impl IntoView {
                                         >
                                             "−"
                                         </button>
-                                        <span class="text-sm mr-4">"#"{tx_input.index}</span>
+                                        <span class="text-sm mr-4">"#"{index}</span>
                                     </div>
                                 </li>
                             }
                         }
-                    </For>
+                    </ForEnumerate>
                 </ol>
                 <button
                     on:click=move |_| new_tx_input(&mut tx_inputs.write())
@@ -293,13 +289,15 @@ fn App() -> impl IntoView {
                     "+"
                 </button>
             </div>
+
+            // Outputs
             <div class="basis-[32rem] grow">
                 <p class="mb-1">Outputs</p>
                 <ol start="0">
-                    <For
+                    <ForEnumerate
                         each=move || 0..tx_outputs.read().len()
                         key=move |i| tx_outputs.read()[*i].key
-                        let:i
+                        let:(index, i)
                     >
                         {
                             let tx_output = tx_outputs.read()[i];
@@ -311,12 +309,12 @@ fn App() -> impl IntoView {
                                             on:click=move |_| delete_tx_output(tx_output.key)
                                             class="border border-solid rounded border-stone-600 px-2 bg-red-950"
                                         >"−"</button>
-                                        <span class="text-sm mr-4">"#"{tx_output.index}</span>
+                                        <span class="text-sm mr-4">"#"{index}</span>
                                     </div>
                                 </li>
                             }
                         }
-                    </For>
+                    </ForEnumerate>
                 </ol>
                 <button
                     on:click=move |_| new_tx_output(&mut tx_outputs.write())
