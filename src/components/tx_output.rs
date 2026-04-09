@@ -6,6 +6,7 @@ use leptos::prelude::{
 };
 use leptos::{component, view, IntoView};
 
+use crate::components::drag_handle::DragHandle;
 use crate::{
     components::{
         script_input::{ScriptDisplayFormat, ScriptInput, ScriptInputValue},
@@ -65,7 +66,11 @@ impl TryFrom<TxOutputState> for TxOut {
 }
 
 #[component]
-pub fn TxOutput(tx_output: TxOutputState, ctx: Context) -> impl IntoView {
+pub fn TxOutput(
+    tx_output: TxOutputState,
+    ctx: Context,
+    set_draggable: impl Fn(bool) + 'static,
+) -> impl IntoView {
     let script_pubkey = tx_output.script_pubkey;
     let script_format = tx_output.script_display_format;
     let cashtoken_enabled = tx_output.token_data_state.cashtoken_enabled;
@@ -102,6 +107,9 @@ pub fn TxOutput(tx_output: TxOutputState, ctx: Context) -> impl IntoView {
                     <option value={ScriptDisplayFormat::Asm.to_str()}>Asm</option>
                     <option value={ScriptDisplayFormat::Hex.to_str()}>Hex</option>
                 </select>
+            </div>
+            <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true) >
+                <DragHandle />
             </div>
         </div>
 

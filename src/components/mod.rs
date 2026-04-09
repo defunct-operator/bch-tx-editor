@@ -9,6 +9,7 @@ use leptos::{
     view, IntoView,
 };
 
+pub mod drag_handle;
 pub mod script_input;
 pub mod token_data;
 pub mod tracker;

@@ -114,6 +114,7 @@ dependencies = [
  "serde",
  "tokio-util",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

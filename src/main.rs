@@ -4,6 +4,7 @@ mod macros;
 mod components;
 mod electrum_client;
 pub mod js_reexport;
+pub mod leptos_drag_reorder;
 pub mod partially_signed;
 pub mod util;
 
@@ -17,14 +18,17 @@ use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use components::ParsedInput;
 use leptos::prelude::{
     event_target_value, mount_to_body, AddAnyAttr, ClassAttribute, ElementChild, ForEnumerate, Get,
-    GlobalAttributes, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal, Set, StoredValue,
-    With, Write,
+    GlobalAttributes, NodeRefAttribute, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal,
+    Set, StoredValue, With, Write,
 };
 use leptos::{component, logging::log, view, IntoView};
 use macros::StrEnum;
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{TxOutput, TxOutputState};
+use crate::leptos_drag_reorder::{
+    provide_drag_reorder, use_drag_reorder, HoverPosition, UseDragReorderReturn,
+};
 use crate::partially_signed::PartiallySignedTransaction;
 
 impl StrEnum for Network {
@@ -61,8 +65,8 @@ fn main() {
 fn App() -> impl IntoView {
     let secp = StoredValue::new(Secp256k1::new());
     let network = RwSignal::new(Network::Bitcoin);
-    let tx_inputs = RwSignal::new(vec![TxInputState::new(0)]);
-    let tx_outputs = RwSignal::new(vec![TxOutputState::new(0)]);
+    let tx_inputs = RwSignal::new_local(vec![TxInputState::new(0)]);
+    let tx_outputs = RwSignal::new_local(vec![TxOutputState::new(0)]);
     let tx_version = RwSignal::new(2i32);
     let tx_locktime = RwSignal::new(0u32);
     let tx_hex = RwSignal::new(String::new());
@@ -208,6 +212,8 @@ fn App() -> impl IntoView {
         tx_locktime.set(0);
     };
 
+    let [txinput_column_ref] = provide_drag_reorder([tx_inputs], |p| p.key.to_string().into());
+    let [txoutput_column_ref] = provide_drag_reorder([tx_outputs], |p| p.key.to_string().into());
     view! {
         <div class="flex gap-3 justify-between">
             <div class="table">
@@ -231,7 +237,7 @@ fn App() -> impl IntoView {
             <div class="table">
                 <div class="table-row">
                     <div class="table-cell pr-1">
-                        <label for="tx_locktime">Network:</label>
+                        <label for="network">Network:</label>
                     </div>
                     <div class="table-cell">
                         <select
@@ -240,6 +246,7 @@ fn App() -> impl IntoView {
                                 network.set(Network::from_str(&event_target_value(&e)).unwrap())
                             }
                             prop:value={move || network().to_str()}
+                            id="network"
                         >
                             <option value={Network::Bitcoin.to_str()}>mainnet</option>
                             <option value={Network::Testnet.to_str()}>testnet3</option>
@@ -257,17 +264,35 @@ fn App() -> impl IntoView {
             // Inputs
             <div class="basis-[32rem] grow">
                 <p class="mb-1">Inputs</p>
-                <ol start="0">
+                <ol node_ref=txinput_column_ref start="0">
                     <ForEnumerate
-                        each=move || 0..tx_inputs.read().len()
-                        key=move |i| tx_inputs.read()[*i].key
-                        let(index, i)
+                        each=tx_inputs
+                        key=move |t| t.key
+                        let(index, tx_input)
                     >
                         {
-                            let tx_input = tx_inputs.read()[i];
+                            let UseDragReorderReturn {
+                                node_ref,
+                                draggable,
+                                set_draggable,
+                                hover_position,
+                                on_dragstart,
+                                on_dragend,
+                                ..
+                            } = use_drag_reorder::<_, TxInputState>(tx_input.key.to_string());
+
                             view! {
-                                <li class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800">
-                                    <TxInput tx_input secp ctx/>
+                                <li
+                                    node_ref=node_ref
+                                    class="border border-solid rounded-md border-stone-600 p-1 mb-2 bg-stone-800 panel"
+                                    class=("panel--above", move || matches!(hover_position.get(), Some(HoverPosition::Above)))
+                                    class=("panel--below", move || matches!(hover_position.get(), Some(HoverPosition::Below)))
+                                    draggable=move || draggable.get().then_some("true")
+                                    class=("opacity-50", draggable)
+                                    on:dragstart=on_dragstart
+                                    on:dragend=on_dragend
+                                >
+                                    <TxInput tx_input secp ctx set_draggable/>
                                     <div class="flex justify-between">
                                         <button
                                             on:click=move |_| delete_tx_input(tx_input.key)
@@ -293,17 +318,35 @@ fn App() -> impl IntoView {
             // Outputs
             <div class="basis-[32rem] grow">
                 <p class="mb-1">Outputs</p>
-                <ol start="0">
+                <ol node_ref=txoutput_column_ref start="0">
                     <ForEnumerate
-                        each=move || 0..tx_outputs.read().len()
-                        key=move |i| tx_outputs.read()[*i].key
-                        let:(index, i)
+                        each=tx_outputs
+                        key=move |t| t.key
+                        let:(index, tx_output)
                     >
                         {
-                            let tx_output = tx_outputs.read()[i];
+                            let UseDragReorderReturn {
+                                node_ref,
+                                draggable,
+                                set_draggable,
+                                hover_position,
+                                on_dragstart,
+                                on_dragend,
+                                ..
+                            } = use_drag_reorder::<_, TxOutputState>(tx_output.key.to_string());
+
                             view! {
-                                <li class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2">
-                                    <TxOutput tx_output ctx/>
+                                <li
+                                    node_ref=node_ref
+                                    class="border border-solid rounded border-stone-600 p-1 bg-stone-800 mb-2 panel"
+                                    class=("panel--above", move || matches!(hover_position.get(), Some(HoverPosition::Above)))
+                                    class=("panel--below", move || matches!(hover_position.get(), Some(HoverPosition::Below)))
+                                    draggable=move || draggable.get().then_some("true")
+                                    class=("opacity-50", draggable)
+                                    on:dragstart=on_dragstart
+                                    on:dragend=on_dragend
+                                >
+                                    <TxOutput tx_output ctx set_draggable/>
                                     <div class="flex justify-between">
                                         <button
                                             on:click=move |_| delete_tx_output(tx_output.key)

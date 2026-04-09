@@ -10,6 +10,7 @@ use leptos::prelude::{
 use leptos::{component, view, IntoView};
 
 use super::script_input::ScriptInputValue;
+use crate::components::drag_handle::DragHandle;
 use crate::components::script_input::{ScriptDisplayFormat, ScriptInput};
 use crate::components::{
     token_data::{TokenData, TokenDataState},
@@ -215,6 +216,7 @@ pub fn TxInput<C: Verification + 'static>(
     tx_input: TxInputState,
     secp: StoredValue<Secp256k1<C>>,
     ctx: Context,
+    set_draggable: impl Fn(bool) + 'static,
 ) -> impl IntoView {
     let txid = tx_input.txid;
     let script_sig = tx_input.script_sig;
@@ -313,7 +315,10 @@ pub fn TxInput<C: Verification + 'static>(
                 placeholder="Transaction ID"
             />
             <span>:</span>
-            <ParsedInput value=tx_input.vout {..} placeholder="Index" class=("w-16", true) id=""/>
+            <ParsedInput value=tx_input.vout {..} placeholder="Index" class=("w-14", true)/>
+            <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true) >
+                <DragHandle />
+            </div>
         </div>
         <div class="mb-1 flex">
             <ScriptInput
