@@ -79,6 +79,7 @@ pub fn TxOutput(tx_output: TxOutputState, ctx: Context) -> impl IntoView {
                 value=script_pubkey
                 format=script_format
                 network=ctx.network
+                oneline=true
                 {..}
                 rows=1
                 placeholder=move || {

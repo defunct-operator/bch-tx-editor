@@ -171,7 +171,7 @@ fn App() -> impl IntoView {
 
         for (i, output) in tx.output.iter().enumerate() {
             let script_pubkey_hex = output.script_pubkey.to_hex();
-            if script_pubkey_hex.starts_with("6a") {
+            if output.script_pubkey[0] == 0x6a {
                 // OP_RETURN script
                 tx_outputs[i]
                     .script_display_format

@@ -13,6 +13,17 @@ use crate::{
     util::{cash_addr_to_script, script_to_cash_addr},
 };
 
+fn replace_space_with_newline(s: &mut String) {
+    // We only replace spaces with newlines. Thus the end result is always valid UTF-8.
+    unsafe {
+        for b in s.as_bytes_mut() {
+            if *b == b' ' {
+                *b = b'\n';
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum ScriptInputValue {
     Hex(String),
@@ -85,6 +96,7 @@ pub fn ScriptInput(
     format: RwSignal<ScriptDisplayFormat>,
     network: ReadSignal<Network>,
     #[prop(into, default=Default::default())] disabled: MaybeProp<bool>,
+    oneline: bool,
 ) -> impl IntoView {
     let error = RwSignal::new(false);
     let disabled = move || disabled().unwrap_or(false);
@@ -110,7 +122,11 @@ pub fn ScriptInput(
             ScriptDisplayFormat::Asm => match Script::try_from(value) {
                 Ok(s) => {
                     error.set(false);
-                    bin_to_cash_assembly(s.as_bytes().into())
+                    let mut s = bin_to_cash_assembly(s.as_bytes().into());
+                    if !oneline {
+                        replace_space_with_newline(&mut s);
+                    }
+                    s
                 }
                 Err(e) => {
                     error.set(true);

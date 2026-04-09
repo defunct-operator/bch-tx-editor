@@ -321,6 +321,7 @@ pub fn TxInput<C: Verification + 'static>(
                 format=script_sig_format
                 network=ctx.network
                 disabled=unsigned
+                oneline=false
                 attr:placeholder=move || {
                     match script_sig_format() {
                         ScriptDisplayFormat::Addr => "How did you make this happen?",
