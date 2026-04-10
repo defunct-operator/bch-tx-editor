@@ -1,3 +1,8 @@
+[tools]
+tailwindcss = "4.2.2"
+wasm_bindgen = "0.2.117"
+wasm_opt = "version_129"
+
 [build]
 minify = "on_release"
 

@@ -1,2 +1,2 @@
-[build]
-target = "wasm32-unknown-unknown"
+[alias]
+bin = ["run", "--package", "cargo-bin", "--"]

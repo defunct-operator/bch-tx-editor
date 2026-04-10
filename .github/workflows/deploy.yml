@@ -1,0 +1,57 @@
+name: Build and Deploy to Github Pages
+
+on:
+  push:
+    tags: "deploy/**"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up cache
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cargo/.crates.toml
+          ~/.cargo/.crates2.json
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.cache/trunk/
+          ~/.rustup/
+          target/
+          .bin/
+          js-reexport/node_modules
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'Cargo.toml', 'Trunk.toml', 'js-reexport/package-lock.json', 'rust-toolchain.toml') }}
+    - name: Build project
+      run: cd js-reexport; npm install; cd ..; cargo bin trunk build --release --verbose --public-url .
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v4
+      with:
+        path: 'dist'
+  deploy:
+    needs: build
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    # Specify runner + deployment step
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
