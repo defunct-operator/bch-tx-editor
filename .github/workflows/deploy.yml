@@ -3,7 +3,6 @@ name: Build and Deploy to Github Pages
 on:
   push:
     tags: "deploy/**"
-  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
