@@ -241,7 +241,7 @@ fn App() -> impl IntoView {
                     </div>
                     <div class="table-cell">
                         <select
-                            class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
+                            class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                             on:input=move |e| {
                                 network.set(Network::from_str(&event_target_value(&e)).unwrap())
                             }
@@ -262,7 +262,7 @@ fn App() -> impl IntoView {
         <div class="flex flex-wrap gap-3 mt-3">
 
             // Inputs
-            <div class="basis-[32rem] grow">
+            <div class="basis-lg grow">
                 <p class="mb-1">Inputs</p>
                 <ol node_ref=txinput_column_ref start="0">
                     <ForEnumerate
@@ -316,7 +316,7 @@ fn App() -> impl IntoView {
             </div>
 
             // Outputs
-            <div class="basis-[32rem] grow">
+            <div class="basis-lg grow">
                 <p class="mb-1">Outputs</p>
                 <ol node_ref=txoutput_column_ref start="0">
                     <ForEnumerate

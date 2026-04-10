@@ -336,11 +336,11 @@ pub fn TxInput<C: Verification + 'static>(
                 }
                 {..}
                 class=("text-xs", true)
-                class=("pt-[1px]", true)
+                class=("pt-px", true)
             />
             <div>
                 <select
-                    class="bg-inherit border rounded ml-1 p-1 disabled:opacity-30"
+                    class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                     on:input=move |e| {
                         script_sig_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                     }
@@ -402,7 +402,7 @@ pub fn TxInput<C: Verification + 'static>(
                 />
                 <div>
                     <select
-                        class="bg-inherit border rounded ml-1 p-1"
+                        class="bg-inherit border border-stone-600 rounded ml-1 p-1"
                         on:input=move |e| {
                             pubkey_format.set(PubkeyDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                         }

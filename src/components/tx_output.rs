@@ -97,7 +97,7 @@ pub fn TxOutput(
             />
             <div>
                 <select
-                    class="bg-inherit border rounded ml-1 p-1"
+                    class="bg-inherit border border-stone-600 rounded ml-1 p-1"
                     on:input=move |e| {
                         script_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                     }
