@@ -332,6 +332,7 @@ pub fn TxInput<C: Verification + 'static>(
                         ScriptDisplayFormat::Addr => "How did you make this happen?",
                         ScriptDisplayFormat::Hex => "Unlocking Script Hex",
                         ScriptDisplayFormat::Asm => "Unlocking Script Asm",
+                        ScriptDisplayFormat::P2sh => "Unlocking Script Asm",
                     }
                 }
                 {..}
@@ -349,6 +350,7 @@ pub fn TxInput<C: Verification + 'static>(
                 >
                     <option value={ScriptDisplayFormat::Asm.to_str()} selected>Asm</option>
                     <option value={ScriptDisplayFormat::Hex.to_str()}>Hex</option>
+                    <option value={ScriptDisplayFormat::P2sh.to_str()}>P2SH</option>
                 </select>
             </div>
         </div>

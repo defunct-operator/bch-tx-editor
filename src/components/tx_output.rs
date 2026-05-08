@@ -92,6 +92,7 @@ pub fn TxOutput(
                         ScriptDisplayFormat::Addr => "Address",
                         ScriptDisplayFormat::Hex => "Locking Script Hex",
                         ScriptDisplayFormat::Asm => "Locking Script Asm",
+                        ScriptDisplayFormat::P2sh => "this is not supposed to happen",
                     }
                 }
             />

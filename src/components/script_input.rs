@@ -1,6 +1,16 @@
-use bitcoincash::{hashes::hex::ToHex, Network, Script};
+use std::fmt::Write as _;
+
+use bitcoincash::{
+    blockdata::{
+        opcodes::{Class, ClassifyContext},
+        script::Instruction,
+    },
+    hashes::hex::ToHex,
+    Network, Script,
+};
 use leptos::{
     component,
+    either::Either,
     prelude::{
         event_target_value, ClassAttribute, Get, GlobalAttributes, MaybeProp, OnAttribute,
         PropAttribute, ReadSignal, RwSignal, Set,
@@ -13,7 +23,41 @@ use crate::{
     util::{cash_addr_to_script, script_to_cash_addr},
 };
 
-fn replace_space_with_newline(s: &mut String) {
+// copied from https://docs.rs/bitcoincash/0.29.2/src/bitcoincash/blockdata/script.rs.html#224-253
+/// Helper to encode an integer in script format.
+/// Writes bytes into the buffer and returns the number of bytes written.
+fn write_scriptint(out: &mut [u8; 8], n: i64) -> usize {
+    let mut len = 0;
+    if n == 0 {
+        return len;
+    }
+
+    let neg = n < 0;
+
+    let mut abs = if neg { -n } else { n } as usize;
+    while abs > 0xFF {
+        out[len] = (abs & 0xFF) as u8;
+        len += 1;
+        abs >>= 8;
+    }
+    // If the number's value causes the sign bit to be set, we need an extra
+    // byte to get the correct value and correct sign bit
+    if abs & 0x80 != 0 {
+        out[len] = abs as u8;
+        len += 1;
+        out[len] = if neg { 0x80u8 } else { 0u8 };
+        len += 1;
+    }
+    // Otherwise we just set the sign bit ourselves
+    else {
+        abs |= if neg { 0x80 } else { 0 };
+        out[len] = abs as u8;
+        len += 1;
+    }
+    len
+}
+
+fn replace_space_with_newline(s: &mut str) {
     // We only replace spaces with newlines. Thus the end result is always valid UTF-8.
     unsafe {
         for b in s.as_bytes_mut() {
@@ -22,6 +66,59 @@ fn replace_space_with_newline(s: &mut String) {
             }
         }
     }
+}
+
+fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
+    let mut r = String::new();
+    let mut instructions = s.instructions_minimal().peekable();
+    while let Some(ins) = instructions.next() {
+        let is_last = instructions.peek().is_none();
+        let data = match ins {
+            Ok(Instruction::PushBytes([])) => Either::Right(0),
+            Ok(Instruction::PushBytes(x)) => Either::Left(x),
+            Ok(Instruction::Op(op)) => {
+                if let Class::PushNum(n) = op.classify(ClassifyContext::Legacy) {
+                    Either::Right(n)
+                } else {
+                    return Err("encountered non-push opcode".into());
+                }
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        if is_last {
+            let mut buf = [0; 8];
+            let d = match data {
+                Either::Left(d) => d,
+                Either::Right(n) => {
+                    let b = write_scriptint(&mut buf, n.into());
+                    &buf[..b]
+                }
+            };
+            let redeem_script = bin_to_cash_assembly(d.into());
+            if !r.is_empty() {
+                r.push('\n');
+            }
+            r.push_str("<\n");
+            for line in redeem_script.split_ascii_whitespace() {
+                r.push_str("    ");
+                r.push_str(line);
+                r.push('\n');
+            }
+            r.push('>');
+        } else {
+            match data {
+                Either::Left(d) => {
+                    r.push_str("<0x");
+                    r.push_str(&d.to_hex());
+                }
+                Either::Right(n) => {
+                    _ = write!(&mut r, "<{}", n);
+                }
+            }
+            r.push_str(">\n");
+        }
+    }
+    Ok(r)
 }
 
 #[derive(Clone)]
@@ -36,12 +133,18 @@ impl ScriptInputValue {
         self.inner().is_empty()
     }
 
-    pub fn format(&self) -> ScriptDisplayFormat {
-        match self {
-            ScriptInputValue::Hex(_) => ScriptDisplayFormat::Hex,
-            ScriptInputValue::Addr(_) => ScriptDisplayFormat::Addr,
-            ScriptInputValue::Asm(_) => ScriptDisplayFormat::Asm,
+    pub fn needs_conversion(&self, format: ScriptDisplayFormat) -> bool {
+        use ScriptDisplayFormat as Sdf;
+        use ScriptInputValue as Siv;
+        if self.inner().is_empty() {
+            return false;
         }
+        !matches!(
+            (self, format),
+            (Siv::Hex(_), Sdf::Hex)
+                | (Siv::Addr(_), Sdf::Addr)
+                | (Siv::Asm(_), Sdf::Asm | Sdf::P2sh)
+        )
     }
 
     pub fn inner(&self) -> &String {
@@ -87,6 +190,7 @@ str_enum! {
         Addr = "addr",
         Asm = "asm",
         Hex = "hex",
+        P2sh = "p2sh",
     }
 }
 
@@ -104,7 +208,7 @@ pub fn ScriptInput(
     let render_value = move || {
         let value = value();
         let format = format();
-        if value.format() == format || value.is_empty() {
+        if !value.needs_conversion(format) {
             error.set(false);
             return value.inner().into();
         }
@@ -126,6 +230,19 @@ pub fn ScriptInput(
                     if !oneline {
                         replace_space_with_newline(&mut s);
                     }
+                    s
+                }
+                Err(e) => {
+                    error.set(true);
+                    e.to_string()
+                }
+            },
+            ScriptDisplayFormat::P2sh => match Script::try_from(value)
+                .map_err(|e| e.to_string())
+                .and_then(disassemble_p2sh_script_sig)
+            {
+                Ok(s) => {
+                    error.set(false);
                     s
                 }
                 Err(e) => {
@@ -166,7 +283,7 @@ pub fn ScriptInput(
                     ScriptDisplayFormat::Addr => {
                         value.set(ScriptInputValue::Addr(event_target_value(&e)));
                     }
-                    ScriptDisplayFormat::Asm => {
+                    ScriptDisplayFormat::Asm | ScriptDisplayFormat::P2sh => {
                         value.set(ScriptInputValue::Asm(event_target_value(&e)));
                     }
                 }

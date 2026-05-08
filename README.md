@@ -17,4 +17,4 @@ To serve locally:
 
 To build:
 
-    $ trunk build --release
+    $ trunk build --public-url . --release
