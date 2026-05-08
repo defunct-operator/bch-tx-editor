@@ -1,6 +1,6 @@
 [tools]
-tailwindcss = "4.2.2"
-wasm_bindgen = "0.2.117"
+tailwindcss = "4.2.4"
+wasm_bindgen = "0.2.121"
 wasm_opt = "version_129"
 
 [build]
