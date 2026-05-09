@@ -57,15 +57,21 @@ fn write_scriptint(out: &mut [u8; 8], n: i64) -> usize {
     len
 }
 
-fn replace_space_with_newline(s: &mut str) {
-    // We only replace spaces with newlines. Thus the end result is always valid UTF-8.
-    unsafe {
-        for b in s.as_bytes_mut() {
-            if *b == b' ' {
-                *b = b'\n';
-            }
+/// Puts each opcode on its a separate line, and adds indentation.
+fn format_cashassembly(src: &str, base_level: usize) -> String {
+    let mut r = String::new();
+    let mut level = base_level;
+    for word in src.split_ascii_whitespace() {
+        if matches!(word, "OP_ELSE" | "OP_ENDIF" | "OP_UNTIL") {
+            level -= 1;
+        }
+        _ = writeln!(r, "{:1$}{word}", "", level * 4);
+        if matches!(word, "OP_IF" | "OP_ELSE" | "OP_BEGIN") {
+            level += 1;
         }
     }
+    r.pop();
+    r
 }
 
 fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
@@ -95,16 +101,13 @@ fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
                 }
             };
             let redeem_script = bin_to_cash_assembly(d.into());
+            let redeem_script = format_cashassembly(&redeem_script, 1);
             if !r.is_empty() {
                 r.push('\n');
             }
-            r.push_str("<\n");
-            for line in redeem_script.split_ascii_whitespace() {
-                r.push_str("    ");
-                r.push_str(line);
-                r.push('\n');
-            }
-            r.push('>');
+            r += "<\n";
+            r += &redeem_script;
+            r += "\n>";
         } else {
             match data {
                 Either::Left(d) => {
@@ -112,7 +115,7 @@ fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
                     r.push_str(&d.to_hex());
                 }
                 Either::Right(n) => {
-                    _ = write!(&mut r, "<{}", n);
+                    _ = write!(r, "<{}", n);
                 }
             }
             r.push_str(">\n");
@@ -228,7 +231,7 @@ pub fn ScriptInput(
                     error.set(false);
                     let mut s = bin_to_cash_assembly(s.as_bytes().into());
                     if !oneline {
-                        replace_space_with_newline(&mut s);
+                        s = format_cashassembly(&s, 0);
                     }
                     s
                 }
