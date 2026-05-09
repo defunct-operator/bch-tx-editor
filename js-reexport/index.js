@@ -1,5 +1,5 @@
 // @ts-check
-import { createCompilerBCH, disassembleBytecodeBCH } from '@bitauth/libauth';
+import { createCompilerBCH, decodeAuthenticationInstructions, disassembleAuthenticationInstructionsMaybeMalformed, OpcodesBCHCHIPs } from '@bitauth/libauth';
 
 let reexports = {};
 
@@ -20,7 +20,13 @@ reexports.cashAssemblyToBin = function(script) {
     }
 };
 
-reexports.disassembleBytecodeBCH = disassembleBytecodeBCH;
+/**
+ * @param {Uint8Array} bytecode
+ * @returns string
+ */
+reexports.disassembleBytecodeBCH = function(bytecode) {
+    return disassembleAuthenticationInstructionsMaybeMalformed(OpcodesBCHCHIPs, decodeAuthenticationInstructions(bytecode));
+};
 
 // @ts-ignore
 window.reexports = reexports;
