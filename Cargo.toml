@@ -4,7 +4,7 @@ members = ["tools/cargo-bin"]
 [package]
 name = "bch-tx-editor"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [package.metadata.bin]
 trunk = { version = "0.22.0-beta.1", git = "https://github.com/trunk-rs/trunk", rev = "1705946833dd1bc60c1ff36517dd8f443f84b991" }
@@ -17,11 +17,14 @@ jsonrpsee = { version = "0.26.0", features = ["wasm-client", "client-web-transpo
 leptos = { version = "0.8.0", features = ["nightly", "csr"] }
 serde = { version = "1.0", features = ["derive"] }
 futures = "0.3"
-tokio-util = "0.7.8"
+tokio = { version = "1.52.3", default-features = false, features = ["sync"] }
 wasm-bindgen = "0.2.87"
 anyhow = "1.0.75"
 console_error_panic_hook = "0.1.7"
 web-sys = { version = "0.3.70", features = ["DataTransfer", "Document", "DomRect", "Element", "NodeList"] }
+leptos-use = { version = "0.18.3", features = ["on_click_outside"], default-features = false }
+tracing = "0.1.44"
+tokio-stream = { version = "0.1.18", default-features = false, features = ["sync"] }
 
 [build-dependencies]
 cc = "1.2.0"

@@ -2,10 +2,13 @@
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
-use jsonrpsee::core::{
-    client::{ClientT, SubscriptionClientT},
-    params::ArrayParams,
-    ClientError as Error,
+use jsonrpsee::{
+    core::{
+        ClientError as Error,
+        client::{ClientT, SubscriptionClientT},
+        params::ArrayParams,
+    },
+    wasm_client::Client,
 };
 
 /// Wrapper that adds convenience methods for interacting with the [Electrum Cash
@@ -28,12 +31,15 @@ pub struct BlockHeaders {
     pub hex: String,
 }
 
-impl<T: ClientT + SubscriptionClientT> ElectrumClient<T> {
+impl<T> ElectrumClient<Client<T>>
+where
+    Client<T>: ClientT + SubscriptionClientT,
+{
     /// The `server.version` method.
     pub async fn server_version(&self, client_name: &str) -> Result<ServerVersionResponse, Error> {
         let [server_software_version, protocol_version]: [String; 2] = self
             .client
-            .request("server.version", (client_name, ["1.2", "1.4"]))
+            .request("server.version", (client_name, ["1.5", "1.6"]))
             .await?;
         Ok(ServerVersionResponse {
             server_software_version,
@@ -75,8 +81,12 @@ impl<T: ClientT + SubscriptionClientT> ElectrumClient<T> {
         Ok(())
     }
 
-    pub fn new(client: T) -> Self {
+    pub fn new(client: Client<T>) -> Self {
         Self { client }
+    }
+
+    pub fn on_disconnect(&self) -> impl Future<Output = Error> {
+        self.client.on_disconnect()
     }
 
     pub async fn ping_loop(&self) {

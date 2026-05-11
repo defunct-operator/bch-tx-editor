@@ -94,7 +94,7 @@ impl UnsignedScriptSig {
             return None;
         }
         match iter.next()?.ok()? {
-            Instruction::PushBytes([0xfd, ref spk @ ..]) => Some(spk.to_vec().into()),
+            Instruction::PushBytes([0xfd, spk @ ..]) => Some(spk.to_vec().into()),
             Instruction::PushBytes(bytes @ [0xff, ..]) => {
                 let xpubkey = ec_ff_parse_xpubkey(secp, bytes)?;
                 Some(Script::new_p2pkh(&xpubkey.to_pub().pubkey_hash()))

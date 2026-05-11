@@ -1,4 +1,3 @@
-#![deny(rust_2018_idioms)]
 #[macro_use]
 mod macros;
 mod components;
@@ -6,6 +5,7 @@ mod electrum_client;
 pub mod js_reexport;
 pub mod leptos_drag_reorder;
 pub mod partially_signed;
+pub mod spv;
 pub mod util;
 
 use anyhow::Result;
@@ -14,22 +14,23 @@ use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
 use bitcoincash::secp256k1::Secp256k1;
 use bitcoincash::{Network, PackedLockTime, Transaction};
-use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use components::ParsedInput;
+use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use leptos::prelude::{
-    event_target_value, mount_to_body, AddAnyAttr, ClassAttribute, ElementChild, ForEnumerate, Get,
-    GlobalAttributes, NodeRefAttribute, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal,
-    Set, StoredValue, With, Write,
+    AddAnyAttr, ClassAttribute, ElementChild, ForEnumerate, Get, GlobalAttributes,
+    NodeRefAttribute, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal, Set, Show,
+    StoredValue, Write, event_target_value, mount_to_body,
 };
-use leptos::{component, logging::log, view, IntoView};
+use leptos::{IntoView, component, logging::log, view};
 use macros::StrEnum;
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{TxOutput, TxOutputState};
 use crate::leptos_drag_reorder::{
-    provide_drag_reorder, use_drag_reorder, HoverPosition, UseDragReorderReturn,
+    HoverPosition, UseDragReorderReturn, provide_drag_reorder, use_drag_reorder,
 };
 use crate::partially_signed::PartiallySignedTransaction;
+use crate::spv::{SpvModal, SpvStatus, provide_spv, use_spv};
 
 impl StrEnum for Network {
     fn to_str(self) -> &'static str {
@@ -57,12 +58,16 @@ impl StrEnum for Network {
 }
 
 fn main() {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    console_error_panic_hook::set_once();
     mount_to_body(|| view! { <App/> });
 }
 
 #[component]
 fn App() -> impl IntoView {
+    provide_spv();
+
+    let spv = use_spv();
+    let spv_status = ReadSignal::from(spv.status.clone());
     let secp = StoredValue::new(Secp256k1::new());
     let network = RwSignal::new(Network::Bitcoin);
     let tx_inputs = RwSignal::new_local(vec![TxInputState::new(0)]);
@@ -74,6 +79,7 @@ fn App() -> impl IntoView {
     let tx_input_id = RwSignal::new(1);
     let tx_output_id = RwSignal::new(1);
     let serialize_message = RwSignal::new(String::new());
+    let show_spv_modal = RwSignal::new(false);
 
     let ctx = Context {
         network: network.read_only(),
@@ -139,9 +145,13 @@ fn App() -> impl IntoView {
     };
     let deserialize_tx = move || -> Result<()> {
         serialize_message.set(String::new());
-        let hex = tx_hex.with(|h| {
-            Vec::from_hex(&h.chars().filter(|c| !c.is_whitespace()).collect::<String>())
-        })?;
+        let hex = Vec::from_hex(
+            &tx_hex
+                .read()
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>(),
+        )?;
         let tx = PartiallySignedTransaction::deserialize(&hex)
             .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
         let mut tx_inputs = tx_inputs.write();
@@ -194,6 +204,7 @@ fn App() -> impl IntoView {
                 .token_data_state
                 .update_from_token_data(output.token.as_ref());
         }
+        tx_hex.write().clear();
         Ok(())
     };
     let reset = move |_| {
@@ -257,13 +268,43 @@ fn App() -> impl IntoView {
                         </select>
                     </div>
                 </div>
+                <div class="table-row">
+                    <div class="table-cell text-right">
+                        <button
+                            on:click=move |_| show_spv_modal(true)
+                            class="border border-solid rounded border-transparent hover:border-stone-600 px-1 inline-flex gap-2 align-top items-center"
+                        >
+                            <div
+                                class="w-[5px] h-[5px] rounded-full"
+                                class=("bg-gray-600", move || spv_status() == SpvStatus::Disabled)
+                                class=("bg-yellow-600", move || spv_status() == SpvStatus::Connecting)
+                                class=("bg-red-600", move || spv_status() == SpvStatus::Disconnected)
+                                class=("bg-green-600", move || spv_status() == SpvStatus::Connected)
+                            ></div>
+                            <div>"SPV:"</div>
+                        </button>
+                    </div>
+                    <div class="table-cell">
+                        <select
+                            class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
+                            on:input=move |e| {
+                                spv.set_enabled(event_target_value(&e) == "enabled");
+                            }
+                            // prop:value={...}
+                            id="spv_enabled"
+                        >
+                            <option value={"disabled"}>Disabled</option>
+                            <option value={"enabled"}>Enabled</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="flex flex-wrap gap-3 mt-3">
+        <div class="flex flex-wrap gap-x-3 gap-y-10 mt-3">
 
             // Inputs
             <div class="basis-lg grow">
-                <p class="mb-1">Inputs</p>
+                <p class="mb-1 text-xl">Inputs</p>
                 <ol node_ref=txinput_column_ref start="0">
                     <ForEnumerate
                         each=tx_inputs
@@ -317,7 +358,7 @@ fn App() -> impl IntoView {
 
             // Outputs
             <div class="basis-lg grow">
-                <p class="mb-1">Outputs</p>
+                <p class="mb-1 text-xl">Outputs</p>
                 <ol node_ref=txoutput_column_ref start="0">
                     <ForEnumerate
                         each=tx_outputs
@@ -367,7 +408,7 @@ fn App() -> impl IntoView {
                 </button>
             </div>
         </div>
-        <div class="mt-3">
+        <div class="mt-10">
             <button
                 class="border border-solid rounded border-stone-600 px-1"
                 on:click=move |_| {
@@ -388,12 +429,9 @@ fn App() -> impl IntoView {
             <button
                 class="border border-solid rounded border-stone-600 px-1 mx-1"
                 on:click=move |_| {
-                    match deserialize_tx() {
-                        Ok(_) => (),
-                        Err(e) => {
-                            log!("Deserialization error: {e}");
-                            tx_hex_errored.set(true);
-                        }
+                    if let Err(e) = deserialize_tx() {
+                        log!("Deserialization error: {e}");
+                        tx_hex_errored.set(true);
                     }
                 }
             >
@@ -416,6 +454,9 @@ fn App() -> impl IntoView {
                 prop:value={tx_hex}
             />
         </div>
+        <Show when=show_spv_modal>
+            <SpvModal on_exit=move || show_spv_modal(false) />
+        </Show>
     }
 }
 
@@ -423,62 +464,6 @@ fn App() -> impl IntoView {
 struct Context {
     network: ReadSignal<Network>,
 }
-
-// #[component]
-// fn ElectrumThingo() -> impl IntoView {
-//     let (cancel_send, mut cancel_recv) = futures::channel::oneshot::channel::<()>();
-//     on_cleanup(|| {
-//         cancel_send.send(()).ok();
-//     });
-//
-//     leptos::spawn_local(async move {
-//         let client = jsonrpsee::wasm_client::WasmClientBuilder::new()
-//             .build("wss://chipnet.imaginary.cash:50004")
-//             .await
-//             .unwrap();
-//         log!("Connected");
-//         let client = ElectrumClient::new(client);
-//
-//         // Protocol version negotiation
-//         let version = client.server_version("").await.unwrap();
-//         log!(
-//             "Server version: {}, protocol version: {}",
-//             version.server_software_version,
-//             version.protocol_version
-//         );
-//
-//         let (current_head, mut subscription) = client.blockchain_headers_subscribe().await.unwrap();
-//         log!("\n{current_head:?}");
-//
-//         futures::select! {
-//             _ = cancel_recv => (),
-//             _ = client.ping_loop().fuse() => (),
-//             _ = async move {
-//                 loop {
-//                     let result = subscription.next().await;
-//                     log!("\n{result:?}");
-//                     if result.is_none() {
-//                         break;
-//                     }
-//                 }
-//             }.fuse() => (),
-//         }
-//         log!("Disconnect");
-//     });
-// }
-
-// #[component]
-// fn AsyncCounter() -> impl IntoView {
-//     let count = RwSignal::new(0);
-//     let async_task = || async move {
-//         loop {
-//             gloo::timers::future::sleep(Duration::from_secs(1)).await;
-//             count.update(|x| *x += 1);
-//         }
-//     };
-//     leptos::spawn_local(async_task());
-//     view! { <p>{count}</p> }
-// }
 
 // use bitcoincash::hashes::sha256;
 // use bitcoincash::secp256k1::{rand, Message};

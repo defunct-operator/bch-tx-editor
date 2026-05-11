@@ -28,3 +28,25 @@ macro_rules! str_enum {
         }
     }
 }
+
+pub struct DropGuard<F: FnOnce()> {
+    on_drop: Option<F>,
+}
+
+impl<F: FnOnce()> DropGuard<F> {
+    pub fn new(on_drop: F) -> Self {
+        Self { on_drop: Some(on_drop) }
+    }
+
+    pub fn disarm(mut self) {
+        self.on_drop = None;
+    }
+}
+
+impl<F: FnOnce()> Drop for DropGuard<F> {
+    fn drop(&mut self) {
+        if let Some(f) = self.on_drop.take() {
+            f();
+        }
+    }
+}
