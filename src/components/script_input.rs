@@ -291,7 +291,7 @@ pub fn ScriptInput(
                     }
                 }
             }
-            class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
+            class="border border-solid rounded border-stone-600 px-1 w-full placeholder:text-stone-600 font-mono grow bg-stone-900"
             prop:value=render_value
             disabled=move || error() || disabled()
             class=("text-red-700", error)

@@ -261,7 +261,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                 // NFT Capability
                 <div class="grow">
                     <select
-                        class="bg-inherit border border-stone-600 rounded p-1 disabled:opacity-30"
+                        class="bg-stone-900 border border-stone-600 rounded p-1 disabled:opacity-30"
                         disabled=move || !has_nft()
                         on:input=move |e| {
                             nft_capability.set(
@@ -291,7 +291,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                 }
                             }
                             class=concat!(
-                                "border border-solid rounded border-stone-600 px-1 w-full bg-inherit ",
+                                "border border-solid rounded border-stone-600 px-1 w-full ",
                                 "placeholder:text-stone-600 font-mono grow bg-stone-900 ",
                             )
                             placeholder="Commitment"
@@ -335,7 +335,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                         />
                         <div>
                             <select
-                                class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
+                                class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                                 disabled=move || !has_nft()
                                 on:input=move |e| {
                                     nft_commitment_format.set(

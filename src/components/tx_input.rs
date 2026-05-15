@@ -341,7 +341,7 @@ pub fn TxInput<C: Verification + 'static>(
             />
             <div>
                 <select
-                    class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
+                    class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                     on:input=move |e| {
                         script_sig_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                     }
@@ -391,7 +391,7 @@ pub fn TxInput<C: Verification + 'static>(
                             _ => unreachable!(),
                         }
                     }
-                    class="border border-solid rounded border-stone-600 px-1 w-full bg-inherit placeholder:text-stone-600 font-mono grow bg-stone-900"
+                    class="border border-solid rounded border-stone-600 px-1 w-full placeholder:text-stone-600 font-mono grow bg-stone-900"
                     placeholder=move || {
                         match pubkey_format() {
                             PubkeyDisplayFormat::Addr => "Previous Address",
@@ -404,7 +404,7 @@ pub fn TxInput<C: Verification + 'static>(
                 />
                 <div>
                     <select
-                        class="bg-inherit border border-stone-600 rounded ml-1 p-1"
+                        class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                         on:input=move |e| {
                             pubkey_format.set(PubkeyDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                         }

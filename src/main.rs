@@ -241,7 +241,7 @@ fn App() -> impl IntoView {
                     </div>
                     <div class="table-cell">
                         <select
-                            class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
+                            class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                             on:input=move |e| {
                                 network.set(Network::from_str(&event_target_value(&e)).unwrap())
                             }
