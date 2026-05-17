@@ -9,7 +9,7 @@ use leptos::{
     tachys::dom::event_target,
     web_sys::{self, js_sys::Function},
 };
-use wasm_bindgen::{prelude::Closure, JsCast};
+use wasm_bindgen::{JsCast, prelude::Closure};
 
 /// Return value for [`use_drag_reorder`].
 pub struct UseDragReorderReturn<E, SetDraggable, OnDragStart, OnDragEnd>

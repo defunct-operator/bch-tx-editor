@@ -3,26 +3,26 @@ use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::secp256k1::{Secp256k1, Verification};
 use bitcoincash::{OutPoint, Script, Sequence, TxIn};
 use leptos::prelude::{
-    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, ElementChild,
-    Get, GlobalAttributes, OnAttribute, PropAttribute, ReadValue, ArcRwSignal, RwSignal, Set, Show, StoredValue,
-    Write,
+    AddAnyAttr, ArcRwSignal, ClassAttribute, ElementChild, Get, GlobalAttributes, OnAttribute,
+    PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue, Write, event_target_checked,
+    event_target_value,
 };
 use leptos::reactive::signal::ReadSignal;
-use leptos::{component, view, IntoView};
+use leptos::{IntoView, component, view};
 
 use super::script_input::ScriptInputValue;
+use crate::Context;
 use crate::components::drag_handle::DragHandle;
 use crate::components::script_input::{ScriptDisplayFormat, ScriptInput};
 use crate::components::{
-    token_data::{TokenData, TokenDataState},
     ParsedInput,
+    token_data::{TokenData, TokenDataState},
 };
 use crate::js_reexport::bin_to_cash_assembly;
 use crate::macros::StrEnum;
 use crate::partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn};
 use crate::spv::{SpvConnStatus, use_spv};
 use crate::util::{cash_addr_to_script, script_to_cash_addr};
-use crate::Context;
 
 str_enum! {
     #[derive(Copy, Clone, Default)]

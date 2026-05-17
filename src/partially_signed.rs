@@ -1,22 +1,22 @@
 use std::fmt::LowerHex;
 
 use bitcoincash::{
+    Address, Network, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt,
     blockdata::{
         opcodes::{
-            all::{OP_CHECKMULTISIG, OP_SPECIAL_TOKEN_PREFIX},
             Class, ClassifyContext,
+            all::{OP_CHECKMULTISIG, OP_SPECIAL_TOKEN_PREFIX},
         },
         script::{self, Instruction},
         token::OutputData,
     },
     consensus::{
-        encode::{self, MAX_VEC_SIZE},
         Decodable, Encodable,
+        encode::{self, MAX_VEC_SIZE},
     },
     psbt::serialize::{Deserialize, Serialize},
     secp256k1::{Secp256k1, Verification},
     util::bip32::{ChildNumber, ExtendedPubKey},
-    Address, Network, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt,
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -155,7 +155,12 @@ fn is_multisig(script: &[u8], num_sigs: usize) -> bool {
         return false;
     };
     // Electron Cash only seems to recognize m and n up to 16
-    let [Instruction::Op(m), pubkeys @ .., Instruction::Op(n), checkmultisig] = &instructions[..]
+    let [
+        Instruction::Op(m),
+        pubkeys @ ..,
+        Instruction::Op(n),
+        checkmultisig,
+    ] = &instructions[..]
     else {
         return false;
     };

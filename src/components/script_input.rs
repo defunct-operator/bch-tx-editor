@@ -1,21 +1,21 @@
 use std::fmt::Write as _;
 
 use bitcoincash::{
+    Network, Script,
     blockdata::{
         opcodes::{Class, ClassifyContext},
         script::Instruction,
     },
     hashes::hex::ToHex,
-    Network, Script,
 };
 use leptos::{
-    component,
+    IntoView, component,
     either::Either,
     prelude::{
-        event_target_value, ClassAttribute, Get, GlobalAttributes, MaybeProp, OnAttribute,
-        PropAttribute, ReadSignal, RwSignal, Set,
+        ClassAttribute, Get, GlobalAttributes, MaybeProp, OnAttribute, PropAttribute, ReadSignal,
+        RwSignal, Set, event_target_value,
     },
-    view, IntoView,
+    view,
 };
 
 use crate::{

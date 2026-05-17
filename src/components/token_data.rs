@@ -2,18 +2,17 @@ use std::borrow::Cow;
 
 use anyhow::Result;
 use bitcoincash::{
+    TokenID,
     blockdata::token::{Capability, OutputData, Structure},
     hashes::hex::{FromHex, ToHex},
-    TokenID,
 };
 use leptos::{
-    component,
+    IntoView, component,
     prelude::{
-        event_target_checked, event_target_value, AddAnyAttr, ClassAttribute,
-        ElementChild, Get, GlobalAttributes, OnAttribute, PropAttribute, Read, ArcRwSignal, RwSignal, Set, Show,
-        Write,
+        AddAnyAttr, ArcRwSignal, ClassAttribute, ElementChild, Get, GlobalAttributes, OnAttribute,
+        PropAttribute, Read, RwSignal, Set, Show, Write, event_target_checked, event_target_value,
     },
-    view, IntoView,
+    view,
 };
 
 use crate::{components::ParsedInput, macros::StrEnum};

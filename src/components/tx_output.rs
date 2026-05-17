@@ -1,21 +1,21 @@
 use anyhow::Result;
 use bitcoincash::TxOut;
 use leptos::prelude::{
-    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, ElementChild,
-    Get, OnAttribute, PropAttribute, RwSignal, Set,
+    AddAnyAttr, ClassAttribute, ElementChild, Get, OnAttribute, PropAttribute, RwSignal, Set,
+    event_target_checked, event_target_value,
 };
 use leptos::reactive::signal::ArcRwSignal;
-use leptos::{component, view, IntoView};
+use leptos::{IntoView, component, view};
 
 use crate::components::drag_handle::DragHandle;
 use crate::{
+    Context,
     components::{
+        ParsedInput,
         script_input::{ScriptDisplayFormat, ScriptInput, ScriptInputValue},
         token_data::{TokenData, TokenDataState},
-        ParsedInput,
     },
     macros::StrEnum,
-    Context,
 };
 
 #[derive(Clone)]

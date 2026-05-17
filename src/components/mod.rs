@@ -1,12 +1,12 @@
 use std::str::FromStr;
 
 use leptos::{
-    component,
+    IntoView, component,
     prelude::{
-        event_target_value, ClassAttribute, OnAttribute, PropAttribute, ReadSignal, RwSignal, Set,
+        ClassAttribute, OnAttribute, PropAttribute, ReadSignal, RwSignal, Set, event_target_value,
     },
     tachys::html::property::IntoProperty,
-    view, IntoView,
+    view,
 };
 
 pub mod drag_handle;

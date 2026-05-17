@@ -6,8 +6,8 @@ pub mod js_reexport;
 pub mod leptos_drag_reorder;
 pub mod partially_signed;
 pub mod spv;
-pub mod util;
 pub mod unbounded_rx_mut_stream;
+pub mod util;
 
 use anyhow::Result;
 use bitcoincash::consensus::encode;
@@ -32,7 +32,7 @@ use crate::leptos_drag_reorder::{
     HoverPosition, UseDragReorderReturn, provide_drag_reorder, use_drag_reorder,
 };
 use crate::partially_signed::PartiallySignedTransaction;
-use crate::spv::{SpvModal, SpvConnStatus, provide_spv, use_spv};
+use crate::spv::{SpvConnStatus, SpvModal, provide_spv, use_spv};
 
 impl StrEnum for Network {
     fn to_str(self) -> &'static str {

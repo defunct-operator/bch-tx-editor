@@ -172,8 +172,8 @@ async fn conn_task(
     info!(?current_tip, "Subscribed to headers");
 
     let mut requests = tx_cache.requests.try_lock().unwrap();
-    let request_handler = UnboundedReceiverMutStream::new(&mut requests)
-        .for_each_concurrent(10, |txid| {
+    let request_handler =
+        UnboundedReceiverMutStream::new(&mut requests).for_each_concurrent(10, |txid| {
             let client = &client;
             let tx_cache = &*tx_cache;
             async move {

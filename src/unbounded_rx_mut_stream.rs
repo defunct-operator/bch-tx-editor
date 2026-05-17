@@ -1,8 +1,9 @@
 // Modified from https://docs.rs/tokio-stream/0.1.18/src/tokio_stream/wrappers/mpsc_unbounded.rs.html#34-36
 
-use futures::Stream;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use futures::Stream;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 /// A wrapper around [`&mut tokio::sync::mpsc::UnboundedReceiver`] that implements [`Stream`].
@@ -71,4 +72,3 @@ impl<'a, T> From<&'a mut UnboundedReceiver<T>> for UnboundedReceiverMutStream<'a
         Self::new(recv)
     }
 }
-

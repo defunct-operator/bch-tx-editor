@@ -35,7 +35,9 @@ pub struct DropGuard<F: FnOnce()> {
 
 impl<F: FnOnce()> DropGuard<F> {
     pub fn new(on_drop: F) -> Self {
-        Self { on_drop: Some(on_drop) }
+        Self {
+            on_drop: Some(on_drop),
+        }
     }
 
     pub fn _disarm(mut self) {

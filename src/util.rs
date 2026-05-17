@@ -1,6 +1,6 @@
 use bitcoincash::{
-    blockdata::{opcodes, script::Builder},
     Address, Network, Script,
+    blockdata::{opcodes, script::Builder},
 };
 use cashaddr::CashEnc;
 
