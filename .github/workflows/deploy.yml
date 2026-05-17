@@ -3,6 +3,7 @@ name: Build and Deploy to Github Pages
 on:
   push:
     tags: "deploy/**"
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -36,6 +37,7 @@ jobs:
       with:
         path: 'dist'
   deploy:
+    if: startsWith(github.event.ref, 'refs/tags/deploy/')
     needs: build
 
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
