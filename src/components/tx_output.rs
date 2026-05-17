@@ -1,9 +1,10 @@
 use anyhow::Result;
 use bitcoincash::TxOut;
 use leptos::prelude::{
-    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, Dispose, ElementChild,
+    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, ElementChild,
     Get, OnAttribute, PropAttribute, RwSignal, Set,
 };
+use leptos::reactive::signal::ArcRwSignal;
 use leptos::{component, view, IntoView};
 
 use crate::components::drag_handle::DragHandle;
@@ -17,11 +18,11 @@ use crate::{
     Context,
 };
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct TxOutputState {
-    pub value: RwSignal<u64>,
-    pub script_pubkey: RwSignal<ScriptInputValue>,
-    pub script_display_format: RwSignal<ScriptDisplayFormat>,
+    pub value: ArcRwSignal<u64>,
+    pub script_pubkey: ArcRwSignal<ScriptInputValue>,
+    pub script_display_format: ArcRwSignal<ScriptDisplayFormat>,
     pub token_data_state: TokenDataState,
     pub key: usize,
 }
@@ -29,26 +30,12 @@ pub struct TxOutputState {
 impl TxOutputState {
     pub fn new(key: usize) -> Self {
         Self {
-            value: RwSignal::new(0),
-            script_pubkey: RwSignal::default(),
-            script_display_format: RwSignal::new(ScriptDisplayFormat::Addr),
+            value: ArcRwSignal::new(0),
+            script_pubkey: ArcRwSignal::default(),
+            script_display_format: ArcRwSignal::new(ScriptDisplayFormat::Addr),
             token_data_state: TokenDataState::new(key),
             key,
         }
-    }
-
-    pub fn dispose(self) {
-        let Self {
-            value,
-            script_pubkey,
-            script_display_format,
-            token_data_state,
-            key: _,
-        } = self;
-        value.dispose();
-        script_pubkey.dispose();
-        script_display_format.dispose();
-        token_data_state.dispose();
     }
 }
 
@@ -71,9 +58,10 @@ pub fn TxOutput(
     ctx: Context,
     set_draggable: impl Fn(bool) + 'static,
 ) -> impl IntoView {
-    let script_pubkey = tx_output.script_pubkey;
-    let script_format = tx_output.script_display_format;
-    let cashtoken_enabled = tx_output.token_data_state.cashtoken_enabled;
+    let script_pubkey = RwSignal::from(tx_output.script_pubkey);
+    let script_format = RwSignal::from(tx_output.script_display_format);
+    let cashtoken_enabled = RwSignal::from(tx_output.token_data_state.cashtoken_enabled.clone());
+    let tx_output_value = RwSignal::from(tx_output.value);
 
     let parsed_input_val_id = format!("tx-output-val-{}", tx_output.key);
 
@@ -117,7 +105,7 @@ pub fn TxOutput(
         // Amount
         <div class="my-1">
             <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
-            <ParsedInput value=tx_output.value {..} id=parsed_input_val_id placeholder="Sats" class=("w-52", true)/>
+            <ParsedInput value={tx_output_value} {..} id=parsed_input_val_id placeholder="Sats" class=("w-52", true)/>
             <label>
                 <input
                     type="checkbox"

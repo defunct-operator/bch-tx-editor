@@ -3,10 +3,11 @@ use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::secp256k1::{Secp256k1, Verification};
 use bitcoincash::{OutPoint, Script, Sequence, TxIn};
 use leptos::prelude::{
-    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, Dispose, ElementChild,
-    Get, GlobalAttributes, OnAttribute, PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue,
+    event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, ElementChild,
+    Get, GlobalAttributes, OnAttribute, PropAttribute, ReadValue, ArcRwSignal, RwSignal, Set, Show, StoredValue,
     Write,
 };
+use leptos::reactive::signal::ReadSignal;
 use leptos::{component, view, IntoView};
 
 use super::script_input::ScriptInputValue;
@@ -19,6 +20,7 @@ use crate::components::{
 use crate::js_reexport::bin_to_cash_assembly;
 use crate::macros::StrEnum;
 use crate::partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn};
+use crate::spv::{SpvConnStatus, use_spv};
 use crate::util::{cash_addr_to_script, script_to_cash_addr};
 use crate::Context;
 
@@ -83,18 +85,18 @@ impl TryFrom<UtxoPubkeyData> for UnsignedScriptSig {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct TxInputState {
-    pub txid: RwSignal<String>,
-    pub vout: RwSignal<u32>,
-    pub sequence: RwSignal<u32>,
-    pub script_sig: RwSignal<ScriptInputValue>,
-    pub script_sig_format: RwSignal<ScriptDisplayFormat>,
-    pub unsigned: RwSignal<bool>,
+    pub txid: ArcRwSignal<String>,
+    pub vout: ArcRwSignal<u32>,
+    pub sequence: ArcRwSignal<u32>,
+    pub script_sig: ArcRwSignal<ScriptInputValue>,
+    pub script_sig_format: ArcRwSignal<ScriptDisplayFormat>,
+    pub unsigned: ArcRwSignal<bool>,
     /// The raw data that Electron Cash shoves into the scriptSig section in hex, typically
     /// the extended public key.
-    pub utxo_pubkey: RwSignal<UtxoPubkeyData>,
-    pub utxo_amount: RwSignal<u64>,
+    pub utxo_pubkey: ArcRwSignal<UtxoPubkeyData>,
+    pub utxo_amount: ArcRwSignal<u64>,
     pub token_data_state: TokenDataState,
     pub key: usize,
 }
@@ -102,41 +104,17 @@ pub struct TxInputState {
 impl TxInputState {
     pub fn new(key: usize) -> Self {
         Self {
-            txid: RwSignal::default(),
-            vout: RwSignal::new(0),
-            sequence: RwSignal::new(4294967294),
-            script_sig: RwSignal::default(),
-            script_sig_format: RwSignal::new(ScriptDisplayFormat::Asm),
-            unsigned: RwSignal::new(false),
-            utxo_pubkey: RwSignal::default(),
-            utxo_amount: RwSignal::new(0),
+            txid: ArcRwSignal::default(),
+            vout: ArcRwSignal::new(0),
+            sequence: ArcRwSignal::new(4294967294),
+            script_sig: ArcRwSignal::default(),
+            script_sig_format: ArcRwSignal::new(ScriptDisplayFormat::Asm),
+            unsigned: ArcRwSignal::new(false),
+            utxo_pubkey: ArcRwSignal::default(),
+            utxo_amount: ArcRwSignal::new(0),
             token_data_state: TokenDataState::new(key),
             key,
         }
-    }
-
-    pub fn dispose(&self) {
-        let Self {
-            txid,
-            vout,
-            sequence,
-            script_sig,
-            script_sig_format,
-            unsigned,
-            utxo_pubkey,
-            utxo_amount,
-            token_data_state,
-            key: _,
-        } = self;
-        txid.dispose();
-        vout.dispose();
-        sequence.dispose();
-        script_sig.dispose();
-        script_sig_format.dispose();
-        unsigned.dispose();
-        utxo_pubkey.dispose();
-        utxo_amount.dispose();
-        token_data_state.dispose();
     }
 
     pub fn update_from_txin(&self, input: &MaybeUnsignedTxIn) {
@@ -218,12 +196,13 @@ pub fn TxInput<C: Verification + 'static>(
     ctx: Context,
     set_draggable: impl Fn(bool) + 'static,
 ) -> impl IntoView {
-    let txid = tx_input.txid;
-    let script_sig = tx_input.script_sig;
-    let script_sig_format = tx_input.script_sig_format;
-    let cashtoken_enabled = tx_input.token_data_state.cashtoken_enabled;
-    let unsigned = tx_input.unsigned;
-    let utxo_pubkey = tx_input.utxo_pubkey;
+    let txid = RwSignal::from(tx_input.txid);
+    let script_sig = RwSignal::from(tx_input.script_sig);
+    let script_sig_format = RwSignal::from(tx_input.script_sig_format);
+    let cashtoken_enabled = RwSignal::from(tx_input.token_data_state.cashtoken_enabled.clone());
+    let unsigned = RwSignal::from(tx_input.unsigned);
+    let utxo_amount = RwSignal::from(tx_input.utxo_amount);
+    let utxo_pubkey = RwSignal::from(tx_input.utxo_pubkey);
 
     let pubkey_format = RwSignal::new(PubkeyDisplayFormat::default());
     let utxo_pubkey_enabled = RwSignal::new(true);
@@ -303,7 +282,31 @@ pub fn TxInput<C: Verification + 'static>(
         }
     };
 
+    let spv = use_spv();
+    let spv_status = ReadSignal::from(spv.status);
+    // let source_tx = move || {
+    //     if spv_status() == SpvConnStatus::Connected {
+    //         spv.tx_fetcher.get("d58a0b1ce6a263259e94f895d2cf8c066159a603161b5294b308b114511b88e7".parse().unwrap()).get()
+    //     } else {
+    //         None
+    //     }
+    // };
     view! {
+        // <div class="text-xs">
+        //     <Show
+        //         when=move || spv_status() == SpvConnStatus::Connected
+        //         fallback=|| "not connected"
+        //     >
+        //         // show is implicitly reactive???
+        //         {
+        //             if let Some(source_tx) = source_tx() {
+        //                 format!("{:?}", source_tx)
+        //             } else {
+        //                 String::from("loading")
+        //             }
+        //         }
+        //     </Show>
+        // </div>
         <div class="mb-1 flex">
             <input
                 on:change=move |e| txid.set(event_target_value(&e))
@@ -315,7 +318,7 @@ pub fn TxInput<C: Verification + 'static>(
                 placeholder="Transaction ID"
             />
             <span>:</span>
-            <ParsedInput value=tx_input.vout {..} placeholder="Index" class=("w-14", true)/>
+            <ParsedInput value=tx_input.vout.into() {..} placeholder="Index" class=("w-14", true)/>
             <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true) >
                 <DragHandle />
             </div>
@@ -356,7 +359,7 @@ pub fn TxInput<C: Verification + 'static>(
         </div>
         <div class="my-1">
             <label class="mr-1" for=parsed_input_seq_id.clone()>Sequence Number:</label>
-            <ParsedInput value=tx_input.sequence {..} id=parsed_input_seq_id placeholder="Sequence"/>
+            <ParsedInput value=tx_input.sequence.into() {..} id=parsed_input_seq_id placeholder="Sequence"/>
             <label>
                 <input
                     type="checkbox"
@@ -420,7 +423,7 @@ pub fn TxInput<C: Verification + 'static>(
             // Amount
             <div class="my-1">
                 <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
-                <ParsedInput value=tx_input.utxo_amount {..} placeholder="Sats" class=("w-52", true) id=parsed_input_val_id.clone()/>
+                <ParsedInput value={utxo_amount} {..} placeholder="Sats" class=("w-52", true) id=parsed_input_val_id.clone()/>
                 <label>
                     <input
                         type="checkbox"

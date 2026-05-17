@@ -1,23 +1,34 @@
-use std::{borrow::Cow, pin::pin};
+use std::{
+    borrow::Cow,
+    collections::hash_map::Entry,
+    pin::pin,
+    sync::{Arc, Mutex, RwLock},
+};
 
+use bitcoincash::Txid;
 use futures::{FutureExt, StreamExt, future::Either};
+use gloo::storage::{LocalStorage, Storage};
+use jsonrpsee::core::ClientError;
 use leptos::{
     IntoView, component,
     prelude::{
-        ArcReadSignal, ArcRwSignal, ArcWriteSignal, ClassAttribute, Effect, ElementChild,
-        FromStream, NodeRef, NodeRefAttribute, OnAttribute, PropAttribute, ReadSignal,
-        event_target_value, expect_context, provide_context,
+        ArcReadSignal, ArcRwSignal, ArcWriteSignal, ClassAttribute, ElementChild, FromStream,
+        NodeRef, NodeRefAttribute, OnAttribute, PropAttribute, ReadSignal, event_target_value,
+        expect_context, provide_context,
     },
+    reactive::traits::Set,
     view,
 };
 use leptos_use::on_click_outside;
-use tokio::sync::watch;
+use thiserror::Error;
+use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use crate::{
     electrum_client::ElectrumClient,
     macros::{DropGuard, StrEnum},
+    unbounded_rx_mut_stream::UnboundedReceiverMutStream,
 };
 
 #[component]
@@ -62,7 +73,7 @@ pub fn SpvModal(mut on_exit: impl FnMut() + Clone + 'static) -> impl IntoView {
                 </div>
                 <div>Status: {move || spv_status().to_str()}</div>
                 <div>Blockchain: {move ||
-                    if spv_status() == SpvStatus::Disabled {
+                    if spv_status() == SpvConnStatus::Disabled {
                         Cow::Borrowed("Not connected")
                     } else {
                         Cow::Owned(format!("{} blocks", spv_height()))
@@ -75,7 +86,7 @@ pub fn SpvModal(mut on_exit: impl FnMut() + Clone + 'static) -> impl IntoView {
 
 str_enum! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub enum SpvStatus {
+    pub enum SpvConnStatus {
         Disabled = "Disabled",
         Connecting = "Connecting",
         Connected = "Connected",
@@ -90,9 +101,10 @@ pub struct SpvSettings {
 }
 
 async fn spv_task(
-    status: ArcWriteSignal<SpvStatus>,
+    status: ArcWriteSignal<SpvConnStatus>,
     height: ArcWriteSignal<i64>,
     mut settings: watch::Receiver<SpvSettings>,
+    tx_cache: Arc<TxCache>,
 ) {
     let default_address = "wss://bch.imaginary.cash:50004";
     let mut conn_fut = pin!(Either::Right(std::future::pending()));
@@ -117,11 +129,15 @@ async fn spv_task(
                 if settings.enabled != matches!(*conn_fut, Either::Left(_)) {
                     if settings.enabled {
                         let addr = address.as_deref().unwrap_or(default_address).into();
-                        status(SpvStatus::Connecting);
-                        conn_fut.set(Either::Left(conn_task(status.clone(), height.clone(), addr).fuse()));
+                        conn_fut.set(Either::Left(conn_task(
+                            status.clone(),
+                            height.clone(),
+                            addr,
+                            tx_cache.clone(),
+                        ).fuse()));
                     } else {
-                        status(SpvStatus::Disabled);
                         conn_fut.set(Either::Right(std::future::pending()));
+                        status(SpvConnStatus::Disabled);
                     }
                 }
             }
@@ -130,12 +146,13 @@ async fn spv_task(
 }
 
 async fn conn_task(
-    status: ArcWriteSignal<SpvStatus>,
+    status: ArcWriteSignal<SpvConnStatus>,
     height: ArcWriteSignal<i64>,
     addr: String,
+    tx_cache: Arc<TxCache>,
 ) -> Result<(), jsonrpsee::core::ClientError> {
-    let _disconnect_guard = DropGuard::new(|| status(SpvStatus::Disconnected));
-    status(SpvStatus::Connecting);
+    let _disconnect_guard = DropGuard::new(|| status(SpvConnStatus::Disconnected));
+    status(SpvConnStatus::Connecting);
     info!("Connecting to {addr}");
     let client = jsonrpsee::wasm_client::WasmClientBuilder::new()
         .build(addr)
@@ -143,26 +160,49 @@ async fn conn_task(
         .unwrap();
     let client = ElectrumClient::new(client);
     let version = client.server_version("").await?;
-    status(SpvStatus::Connected);
+    status(SpvConnStatus::Connected);
     info!(
-        "Connected, server version: {}, protocol version: {}",
-        version.server_software_version, version.protocol_version
+        server_version = version.server_software_version,
+        protocol_version = version.protocol_version,
+        "Connected",
     );
 
     let (current_tip, mut subscription) = client.blockchain_headers_subscribe().await?;
     height(current_tip.height);
     info!(?current_tip, "Subscribed to headers");
 
-    futures::select! {
-        _ = client.ping_loop().fuse() => (),
+    let mut requests = tx_cache.requests.try_lock().unwrap();
+    let request_handler = UnboundedReceiverMutStream::new(&mut requests)
+        .for_each_concurrent(10, |txid| {
+            let client = &client;
+            let tx_cache = &*tx_cache;
+            async move {
+                let r = client
+                    .blockchain_transaction_get(txid)
+                    .await
+                    .map(Arc::<[u8]>::from)
+                    .map_err(|e| TxCacheError::RpcError(Arc::new(e)));
+                tx_cache
+                    .map
+                    .write()
+                    .unwrap()
+                    .get(&txid)
+                    .unwrap()
+                    .set(Some(r));
+            }
+        });
+
+    tokio::select! {
+        _ = request_handler => (),
+        _ = client.ping_loop() => (),
         _ = async move {
             loop {
                 let new_tip = subscription.next().await;
-                info!(?new_tip, "Got new block header");
                 let Some(Ok(block)) = new_tip else { break };
+                info!(?block, "Got new block header");
                 height(block.height);
             }
-        }.fuse() => (),
+        } => (),
     }
     Ok(())
 }
@@ -170,8 +210,9 @@ async fn conn_task(
 #[derive(Clone)]
 pub struct Spv {
     pub settings: watch::Sender<SpvSettings>,
-    pub status: ArcReadSignal<SpvStatus>,
+    pub status: ArcReadSignal<SpvConnStatus>,
     pub height: ArcReadSignal<i64>,
+    pub tx_fetcher: Arc<TxCache>,
 }
 
 impl Spv {
@@ -200,30 +241,90 @@ impl Spv {
 
 /// Should only be called once.
 pub fn provide_spv() {
-    let spv_settings = watch::channel(SpvSettings::default());
-    let status = ArcRwSignal::new(SpvStatus::Disabled);
-    let enabled = ArcRwSignal::new(false);
+    const SPV_SERVER_ADDRESS_LOCALSTORAGE_KEY: &str = "spv_server_address";
+    let address = LocalStorage::get::<Option<String>>(SPV_SERVER_ADDRESS_LOCALSTORAGE_KEY)
+        .ok()
+        .flatten();
+    let mut spv_settings = watch::channel(SpvSettings {
+        address,
+        enabled: false,
+    });
+    let status = ArcRwSignal::new(SpvConnStatus::Disabled);
     let height = ArcRwSignal::new(0);
-    let address = ArcRwSignal::new(None);
+    let tx_cache = Arc::default();
     let spv = Spv {
         settings: spv_settings.0.clone(),
         status: status.read_only(),
         height: height.read_only(),
+        tx_fetcher: tx_cache,
     };
-    Effect::new(move || {
-        spv_settings.0.send_replace(SpvSettings {
-            enabled: enabled(),
-            address: address(),
-        });
-    });
     leptos::task::spawn_local(spv_task(
         status.write_only(),
         height.write_only(),
-        spv_settings.1,
+        spv_settings.1.clone(),
+        spv.tx_fetcher.clone(),
     ));
+    leptos::task::spawn_local(async move {
+        while spv_settings.1.changed().await.is_ok() {
+            let addr = spv_settings.1.borrow().address.clone();
+            _ = LocalStorage::set(SPV_SERVER_ADDRESS_LOCALSTORAGE_KEY, addr);
+        }
+    });
     provide_context(spv);
 }
 
 pub fn use_spv() -> Spv {
     expect_context()
+}
+
+type Map<K, V> = std::collections::HashMap<K, V>;
+
+/// A cache for transaction requests. Ensures that only one request is made per TXID.
+pub struct TxCache {
+    map: RwLock<Map<Txid, ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>>>>,
+    requests: Mutex<mpsc::UnboundedReceiver<Txid>>,
+    request_sender: mpsc::UnboundedSender<Txid>,
+}
+
+impl TxCache {
+    pub fn get(&self, txid: Txid) -> ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>> {
+        let mut is_new = false;
+        let entry = match self.map.write().unwrap().entry(txid) {
+            Entry::Occupied(e) => e,
+            Entry::Vacant(vacant_entry) => {
+                is_new = true;
+                vacant_entry.insert_entry(Default::default())
+            }
+        }
+        .get()
+        .clone();
+        if is_new {
+            trace!(?txid, "New request");
+            self.request_sender.send(txid).unwrap();
+        } else {
+            trace!(?txid, "Existing request");
+        }
+        entry
+    }
+}
+
+impl Default for TxCache {
+    fn default() -> Self {
+        let (request_sender, requests) = mpsc::unbounded_channel();
+        Self {
+            map: Default::default(),
+            requests: Mutex::new(requests),
+            request_sender,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum TxCacheError {
+    #[error("spv disconnected")]
+    Disconnected,
+    #[error("rpc error: {0}")]
+    RpcError(Arc<ClientError>),
+    #[error("transaction not found")]
+    NotFound,
 }

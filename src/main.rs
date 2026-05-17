@@ -7,20 +7,22 @@ pub mod leptos_drag_reorder;
 pub mod partially_signed;
 pub mod spv;
 pub mod util;
+pub mod unbounded_rx_mut_stream;
 
 use anyhow::Result;
 use bitcoincash::consensus::encode;
 use bitcoincash::hashes::hex::{FromHex, ToHex};
 use bitcoincash::psbt::serialize::{Deserialize, Serialize};
 use bitcoincash::secp256k1::Secp256k1;
-use bitcoincash::{Network, PackedLockTime, Transaction};
+use bitcoincash::{Network, PackedLockTime, Transaction, Txid};
 use components::ParsedInput;
 use components::script_input::{ScriptDisplayFormat, ScriptInputValue};
 use leptos::prelude::{
     AddAnyAttr, ClassAttribute, ElementChild, ForEnumerate, Get, GlobalAttributes,
     NodeRefAttribute, OnAttribute, PropAttribute, Read, ReadSignal, RwSignal, Set, Show,
-    StoredValue, Write, event_target_value, mount_to_body,
+    StoredValue, Write, event_target_value, mount_to_body, untrack,
 };
+use leptos::reactive::effect::Effect;
 use leptos::{IntoView, component, logging::log, view};
 use macros::StrEnum;
 
@@ -30,7 +32,7 @@ use crate::leptos_drag_reorder::{
     HoverPosition, UseDragReorderReturn, provide_drag_reorder, use_drag_reorder,
 };
 use crate::partially_signed::PartiallySignedTransaction;
-use crate::spv::{SpvModal, SpvStatus, provide_spv, use_spv};
+use crate::spv::{SpvModal, SpvConnStatus, provide_spv, use_spv};
 
 impl StrEnum for Network {
     fn to_str(self) -> &'static str {
@@ -59,6 +61,7 @@ impl StrEnum for Network {
 
 fn main() {
     console_error_panic_hook::set_once();
+    wasm_tracing::set_as_global_default();
     mount_to_body(|| view! { <App/> });
 }
 
@@ -80,6 +83,7 @@ fn App() -> impl IntoView {
     let tx_output_id = RwSignal::new(1);
     let serialize_message = RwSignal::new(String::new());
     let show_spv_modal = RwSignal::new(false);
+    let txid_to_load = RwSignal::new(String::new()); // read by an effect
 
     let ctx = Context {
         network: network.read_only(),
@@ -103,8 +107,7 @@ fn App() -> impl IntoView {
             .find(|(_, t)| t.key == key_to_remove)
             .unwrap()
             .0;
-        let removed = tx_inputs.remove(index_to_remove);
-        removed.dispose();
+        tx_inputs.remove(index_to_remove);
     };
     let delete_tx_output = move |key_to_remove| {
         let mut tx_outputs = tx_outputs.write();
@@ -114,19 +117,18 @@ fn App() -> impl IntoView {
             .find(|(_, t)| t.key == key_to_remove)
             .unwrap()
             .0;
-        let removed = tx_outputs.remove(index_to_remove);
-        removed.dispose();
+        tx_outputs.remove(index_to_remove);
     };
     let serialize_tx = move || -> Result<String> {
         let input = tx_inputs
             .read()
             .iter()
-            .map(|&tx_input| tx_input.try_into())
+            .map(|tx_input| tx_input.clone().try_into())
             .collect::<Result<_, _>>()?;
         let output = tx_outputs
             .read()
             .iter()
-            .map(|&tx_output| tx_output.try_into())
+            .map(|tx_output| tx_output.clone().try_into())
             .collect::<Result<_, _>>()?;
         let tx = PartiallySignedTransaction {
             version: tx_version.get(),
@@ -158,15 +160,11 @@ fn App() -> impl IntoView {
         let mut tx_outputs = tx_outputs.write();
 
         if tx_inputs.len() > tx.input.len() {
-            for tx_input in tx_inputs.drain(tx.input.len()..) {
-                tx_input.dispose();
-            }
+            tx_inputs.drain(tx.input.len()..);
         }
 
         if tx_outputs.len() > tx.output.len() {
-            for tx_output in tx_outputs.drain(tx.output.len()..) {
-                tx_output.dispose();
-            }
+            tx_outputs.drain(tx.output.len()..);
         }
 
         for _ in tx_inputs.len()..tx.input.len() {
@@ -211,17 +209,47 @@ fn App() -> impl IntoView {
         let tx_inputs = &mut *tx_inputs.write();
         let tx_outputs = &mut *tx_outputs.write();
 
-        for tx_input in tx_inputs.drain(..) {
-            tx_input.dispose();
-        }
-        for tx_output in tx_outputs.drain(..) {
-            tx_output.dispose();
-        }
+        tx_inputs.clear();
+        tx_outputs.clear();
         new_tx_input(tx_inputs);
         new_tx_output(tx_outputs);
         tx_version.set(2);
         tx_locktime.set(0);
     };
+
+    let tx_fetcher = spv.tx_fetcher.clone();
+    Effect::new(move || {
+        let txid_to_load = txid_to_load();
+        let txid_to_load = txid_to_load.trim();
+        if txid_to_load.is_empty() {
+            return;
+        }
+        let txid: Txid = match txid_to_load.parse() {
+            Ok(x) => x,
+            Err(e) => {
+                tx_hex_errored(true);
+                serialize_message(e.to_string());
+                return;
+            }
+        };
+        let fetch_result = tx_fetcher.get(txid);
+        match fetch_result() {
+            None => (),
+            Some(Ok(tx_raw)) => {
+                serialize_message.write().clear();
+                tx_hex(tx_raw.to_hex());
+                tx_hex_errored(false);
+                if let Err(e) = untrack(deserialize_tx) {
+                    log!("Deserialization error: {e}");
+                    tx_hex_errored.set(true);
+                }
+            }
+            Some(Err(e)) => {
+                tx_hex_errored(true);
+                serialize_message(e.to_string())
+            }
+        }
+    });
 
     let [txinput_column_ref] = provide_drag_reorder([tx_inputs], |p| p.key.to_string().into());
     let [txoutput_column_ref] = provide_drag_reorder([tx_outputs], |p| p.key.to_string().into());
@@ -276,21 +304,20 @@ fn App() -> impl IntoView {
                         >
                             <div
                                 class="w-[5px] h-[5px] rounded-full"
-                                class=("bg-gray-600", move || spv_status() == SpvStatus::Disabled)
-                                class=("bg-yellow-600", move || spv_status() == SpvStatus::Connecting)
-                                class=("bg-red-600", move || spv_status() == SpvStatus::Disconnected)
-                                class=("bg-green-600", move || spv_status() == SpvStatus::Connected)
+                                class=("bg-gray-600", move || spv_status() == SpvConnStatus::Disabled)
+                                class=("bg-yellow-600", move || spv_status() == SpvConnStatus::Connecting)
+                                class=("bg-red-600", move || spv_status() == SpvConnStatus::Disconnected)
+                                class=("bg-green-600", move || spv_status() == SpvConnStatus::Connected)
                             ></div>
                             <div>"SPV:"</div>
                         </button>
                     </div>
                     <div class="table-cell">
                         <select
-                            class="bg-inherit border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
+                            class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                             on:input=move |e| {
                                 spv.set_enabled(event_target_value(&e) == "enabled");
                             }
-                            // prop:value={...}
                             id="spv_enabled"
                         >
                             <option value={"disabled"}>Disabled</option>
@@ -321,6 +348,7 @@ fn App() -> impl IntoView {
                                 on_dragend,
                                 ..
                             } = use_drag_reorder::<_, TxInputState>(tx_input.key.to_string());
+                            let tx_input_key = tx_input.key;
 
                             view! {
                                 <li
@@ -336,7 +364,7 @@ fn App() -> impl IntoView {
                                     <TxInput tx_input secp ctx set_draggable/>
                                     <div class="flex justify-between">
                                         <button
-                                            on:click=move |_| delete_tx_input(tx_input.key)
+                                            on:click=move |_| delete_tx_input(tx_input_key)
                                             class="border border-solid rounded border-stone-600 px-2 bg-red-950"
                                         >
                                             "−"
@@ -375,6 +403,7 @@ fn App() -> impl IntoView {
                                 on_dragend,
                                 ..
                             } = use_drag_reorder::<_, TxOutputState>(tx_output.key.to_string());
+                            let tx_output_key = tx_output.key;
 
                             view! {
                                 <li
@@ -390,7 +419,7 @@ fn App() -> impl IntoView {
                                     <TxOutput tx_output ctx set_draggable/>
                                     <div class="flex justify-between">
                                         <button
-                                            on:click=move |_| delete_tx_output(tx_output.key)
+                                            on:click=move |_| delete_tx_output(tx_output_key)
                                             class="border border-solid rounded border-stone-600 px-2 bg-red-950"
                                         >"−"</button>
                                         <span class="text-sm mr-4">"#"{index}</span>
@@ -442,6 +471,19 @@ fn App() -> impl IntoView {
                 on:click=reset
             >
                 "Reset"
+            </button>
+            <button
+                class="border border-solid rounded border-stone-600 px-1 mx-1 ml-3 disabled:opacity-30"
+                on:click=move |_| txid_to_load(tx_hex())
+                disabled=move || spv_status() != SpvConnStatus::Connected
+                title=move ||
+                    if spv_status() != SpvConnStatus::Connected {
+                        "SPV not connected"
+                    } else {
+                        ""
+                    }
+            >
+                "Load from network"
             </button>
             <span>{serialize_message}</span>
             <textarea

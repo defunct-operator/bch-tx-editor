@@ -1,6 +1,7 @@
 #![allow(unused)]
 use leptos::logging::log;
 
+#[derive(Clone)]
 pub struct Tracker {
     id: usize,
 }

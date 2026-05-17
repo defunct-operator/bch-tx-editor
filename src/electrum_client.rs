@@ -1,6 +1,7 @@
 #![allow(unused)]
 use std::time::Duration;
 
+use bitcoincash::{Txid, hashes::hex::{FromHex, ToHex}};
 use futures::{Stream, StreamExt};
 use jsonrpsee::{
     core::{
@@ -79,6 +80,16 @@ where
             .request("server.ping", ArrayParams::new())
             .await?;
         Ok(())
+    }
+
+    /// The `blockchain.transaction.get` method.
+    pub async fn blockchain_transaction_get(&self, txid: Txid) -> Result<Vec<u8>, Error> {
+        let tx_hex: String = self
+            .client
+            .request("blockchain.transaction.get", (&txid.to_hex(),))
+            .await?;
+        Vec::from_hex(&tx_hex)
+            .map_err(|e| Error::Custom(format!("invalid rpc response: {e}")))
     }
 
     pub fn new(client: Client<T>) -> Self {

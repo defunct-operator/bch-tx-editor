@@ -9,8 +9,8 @@ use bitcoincash::{
 use leptos::{
     component,
     prelude::{
-        event_target_checked, event_target_value, AddAnyAttr, ClassAttribute, Dispose,
-        ElementChild, Get, GlobalAttributes, OnAttribute, PropAttribute, Read, RwSignal, Set, Show,
+        event_target_checked, event_target_value, AddAnyAttr, ClassAttribute,
+        ElementChild, Get, GlobalAttributes, OnAttribute, PropAttribute, Read, ArcRwSignal, RwSignal, Set, Show,
         Write,
     },
     view, IntoView,
@@ -48,54 +48,32 @@ str_enum! {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct TokenDataState {
-    pub cashtoken_enabled: RwSignal<bool>,
-    pub category_id: RwSignal<String>,
-    pub has_ft_amount: RwSignal<bool>,
-    pub ft_amount: RwSignal<u64>,
-    pub has_nft: RwSignal<bool>,
-    pub nft_capability: RwSignal<NftCapability>,
-    pub nft_commitment_hex: RwSignal<String>,
-    pub nft_commitment_format: RwSignal<NftCommitmentFormat>,
+    pub cashtoken_enabled: ArcRwSignal<bool>,
+    pub category_id: ArcRwSignal<String>,
+    pub has_ft_amount: ArcRwSignal<bool>,
+    pub ft_amount: ArcRwSignal<u64>,
+    pub has_nft: ArcRwSignal<bool>,
+    pub nft_capability: ArcRwSignal<NftCapability>,
+    pub nft_commitment_hex: ArcRwSignal<String>,
+    pub nft_commitment_format: ArcRwSignal<NftCommitmentFormat>,
     pub key: usize,
 }
 
 impl TokenDataState {
     pub fn new(key: usize) -> Self {
         Self {
-            cashtoken_enabled: RwSignal::new(false),
-            category_id: RwSignal::default(),
-            has_ft_amount: RwSignal::new(false),
-            ft_amount: RwSignal::new(0),
-            has_nft: RwSignal::new(false),
-            nft_capability: RwSignal::default(),
-            nft_commitment_hex: RwSignal::default(),
-            nft_commitment_format: RwSignal::default(),
+            cashtoken_enabled: ArcRwSignal::new(false),
+            category_id: ArcRwSignal::default(),
+            has_ft_amount: ArcRwSignal::new(false),
+            ft_amount: ArcRwSignal::new(0),
+            has_nft: ArcRwSignal::new(false),
+            nft_capability: ArcRwSignal::default(),
+            nft_commitment_hex: ArcRwSignal::default(),
+            nft_commitment_format: ArcRwSignal::default(),
             key,
         }
-    }
-
-    pub fn dispose(self) {
-        let Self {
-            cashtoken_enabled,
-            category_id,
-            has_ft_amount,
-            ft_amount,
-            has_nft,
-            nft_capability,
-            nft_commitment_hex,
-            nft_commitment_format,
-            key: _,
-        } = self;
-        cashtoken_enabled.dispose();
-        category_id.dispose();
-        has_ft_amount.dispose();
-        ft_amount.dispose();
-        has_nft.dispose();
-        nft_capability.dispose();
-        nft_commitment_hex.dispose();
-        nft_commitment_format.dispose();
     }
 
     pub fn token_data(self) -> Result<Option<OutputData>> {
@@ -139,7 +117,7 @@ impl TokenDataState {
         })
     }
 
-    pub fn update_from_token_data(self, token_data: Option<&OutputData>) {
+    pub fn update_from_token_data(&self, token_data: Option<&OutputData>) {
         match token_data {
             None => {
                 self.cashtoken_enabled.set(false);
@@ -190,12 +168,14 @@ impl TokenDataState {
 
 #[component]
 pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
-    let cashtoken_enabled = token_data.cashtoken_enabled;
-    let has_ft_amount = token_data.has_ft_amount;
-    let has_nft = token_data.has_nft;
-    let nft_capability = token_data.nft_capability;
-    let nft_commitment_hex = token_data.nft_commitment_hex;
-    let nft_commitment_format = token_data.nft_commitment_format;
+    let cashtoken_enabled = RwSignal::from(token_data.cashtoken_enabled);
+    let category_id = RwSignal::from(token_data.category_id);
+    let has_ft_amount = RwSignal::from(token_data.has_ft_amount);
+    let ft_amount = RwSignal::from(token_data.ft_amount);
+    let has_nft = RwSignal::from(token_data.has_nft);
+    let nft_capability = RwSignal::from(token_data.nft_capability);
+    let nft_commitment_hex = RwSignal::from(token_data.nft_commitment_hex);
+    let nft_commitment_format = RwSignal::from(token_data.nft_commitment_format);
 
     let nft_commitment_error = RwSignal::new(false);
     let nft_commitment_lossy = RwSignal::new(false);
@@ -210,12 +190,12 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                 <label for=input_category_id class="mr-1">Category:</label>
                 <input
                     id=input_category_id
-                    on:change=move |e| token_data.category_id.set(event_target_value(&e))
+                    on:change=move |e| category_id.set(event_target_value(&e))
                     class=concat!(
                         "border border-solid rounded border-stone-600 px-1 bg-stone-900 ",
                         "font-mono grow placeholder:text-stone-600",
                     )
-                    prop:value=token_data.category_id
+                    prop:value=category_id
                     placeholder="Category ID"
                 />
             </div>
@@ -238,7 +218,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                     Amount:
                 </label>
                 <ParsedInput
-                    value=token_data.ft_amount
+                    value={ft_amount}
                     {..}
                     id=parsed_input_ft_id
                     disabled={move || !has_ft_amount()}
