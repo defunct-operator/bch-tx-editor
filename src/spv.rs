@@ -156,8 +156,7 @@ async fn conn_task(
     info!("Connecting to {addr}");
     let client = jsonrpsee::wasm_client::WasmClientBuilder::new()
         .build(addr)
-        .await
-        .unwrap();
+        .await?;
     let client = ElectrumClient::new(client);
     let version = client.server_version("").await?;
     status(SpvConnStatus::Connected);
@@ -171,6 +170,8 @@ async fn conn_task(
     height(current_tip.height);
     info!(?current_tip, "Subscribed to headers");
 
+    // Currently, only one instance of conn_task is expected to be running at a time. We could
+    // potentially switch to an MPMC channel later.
     let mut requests = tx_cache.requests.try_lock().unwrap();
     let request_handler =
         UnboundedReceiverMutStream::new(&mut requests).for_each_concurrent(10, |txid| {
