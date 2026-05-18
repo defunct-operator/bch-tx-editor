@@ -25,6 +25,10 @@ use leptos::prelude::{
 use leptos::reactive::effect::Effect;
 use leptos::{IntoView, component, logging::log, view};
 use macros::StrEnum;
+use tracing::Level;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{filter::Targets, layer::SubscriberExt};
+use wasm_tracing::{WasmLayer, WasmLayerConfig};
 
 use crate::components::tx_input::{TxInput, TxInputState};
 use crate::components::tx_output::{TxOutput, TxOutputState};
@@ -61,7 +65,14 @@ impl StrEnum for Network {
 
 fn main() {
     console_error_panic_hook::set_once();
-    wasm_tracing::set_as_global_default();
+    tracing_subscriber::registry()
+        .with(WasmLayer::new(WasmLayerConfig::default()))
+        .with(
+            Targets::new()
+                .with_target("bch_tx_editor", Level::TRACE)
+                .with_default(Level::INFO),
+        )
+        .init();
     mount_to_body(|| view! { <App/> });
 }
 

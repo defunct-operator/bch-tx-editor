@@ -167,6 +167,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+ "tracing-subscriber",
  "wasm-bindgen",
  "wasm-tracing",
  "web-sys",

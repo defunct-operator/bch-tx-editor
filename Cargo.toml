@@ -27,6 +27,7 @@ tracing = "0.1.44"
 tokio-stream = { version = "0.1.18", default-features = false, features = ["sync"] }
 thiserror = "2.0.18"
 wasm-tracing = "2.1.0"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "registry"] }
 
 [build-dependencies]
 cc = "1.2.0"
