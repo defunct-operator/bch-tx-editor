@@ -16,6 +16,7 @@ pub mod tracker;
 pub mod tx_input;
 pub mod tx_output;
 
+// TODO: this needs to be refactored to take a RwSignal<Option<T>>
 #[component]
 pub fn ParsedInput<T: FromStr + Clone + Send + Sync + 'static>(value: RwSignal<T>) -> impl IntoView
 where

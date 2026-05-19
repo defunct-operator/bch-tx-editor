@@ -288,6 +288,7 @@ pub struct TxCache {
 }
 
 impl TxCache {
+    /// Lookup a transaction by TXID. If not present in the cache, queues a request to fetch it.
     pub fn get(&self, txid: Txid) -> ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>> {
         let mut is_new = false;
         let entry = match self.map.write().unwrap().entry(txid) {
@@ -306,6 +307,14 @@ impl TxCache {
             trace!(?txid, "Existing request");
         }
         entry
+    }
+
+    /// Lookup a transaction by TXID. If not present in the cache, returns `None`.
+    pub fn try_get(
+        &self,
+        txid: &Txid,
+    ) -> Option<ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>>> {
+        self.map.read().unwrap().get(txid).cloned()
     }
 }
 

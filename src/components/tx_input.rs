@@ -1,13 +1,17 @@
 use anyhow::Result;
+use bitcoincash::consensus::Decodable;
 use bitcoincash::hashes::hex::ToHex;
 use bitcoincash::secp256k1::{Secp256k1, Verification};
-use bitcoincash::{OutPoint, Script, Sequence, TxIn};
+use bitcoincash::{OutPoint, Script, Sequence, Transaction, TxIn, Txid};
 use leptos::prelude::{
     AddAnyAttr, ArcRwSignal, ClassAttribute, ElementChild, Get, GlobalAttributes, OnAttribute,
     PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue, Write, event_target_checked,
     event_target_value,
 };
+use leptos::reactive::computed::Memo;
 use leptos::reactive::signal::ReadSignal;
+use leptos::reactive::wrappers::read::Signal;
+use leptos::tachys::view::any_view::IntoAny;
 use leptos::{IntoView, component, view};
 
 use super::script_input::ScriptInputValue;
@@ -195,6 +199,7 @@ pub fn TxInput<C: Verification + 'static>(
     secp: StoredValue<Secp256k1<C>>,
     ctx: Context,
     set_draggable: impl Fn(bool) + 'static,
+    is_visible: Signal<bool>,
 ) -> impl IntoView {
     let txid = RwSignal::from(tx_input.txid);
     let script_sig = RwSignal::from(tx_input.script_sig);
@@ -284,29 +289,67 @@ pub fn TxInput<C: Verification + 'static>(
 
     let spv = use_spv();
     let spv_status = ReadSignal::from(spv.status);
-    // let source_tx = move || {
-    //     if spv_status() == SpvConnStatus::Connected {
-    //         spv.tx_fetcher.get("d58a0b1ce6a263259e94f895d2cf8c066159a603161b5294b308b114511b88e7".parse().unwrap()).get()
-    //     } else {
-    //         None
-    //     }
-    // };
+    let vout = tx_input.vout.clone();
+    let prevout = Memo::new(move |_| {
+        let Ok(txid) = txid().parse::<Txid>() else {
+            return None;
+        };
+        if *txid == [0; 32] {
+            return Some(Ok(PrevoutInfo::Coinbase));
+        }
+
+        let ptx = if spv_status() == SpvConnStatus::Connected {
+            if is_visible() {
+                spv.tx_fetcher.get(txid).get()
+            } else {
+                None
+            }
+        } else {
+            Some(spv.tx_fetcher.try_get(&txid).and_then(|s| s.get())?)
+        };
+
+        let ptx = match ptx {
+            None => return Some(Err("Loading...".into())),
+            Some(Err(e)) => return Some(Err(e.to_string())),
+            Some(Ok(t)) => t,
+        };
+        let ptx = match Transaction::consensus_decode(&mut &*ptx) {
+            Ok(t) => t,
+            Err(e) => return Some(Err(format!("failed to decode transaction: {e}"))),
+        };
+
+        let txout = &ptx.output[vout.get() as usize];
+        match script_to_cash_addr(&txout.script_pubkey, ctx.network.get()) {
+            Ok(addr) => Some(Ok(PrevoutInfo::Address {
+                addr,
+                amount: txout.value,
+            })),
+            Err(_) => Some(Ok(PrevoutInfo::P2s {
+                amount: txout.value,
+            })),
+        }
+    });
+
     view! {
-        // <div class="text-xs">
-        //     <Show
-        //         when=move || spv_status() == SpvConnStatus::Connected
-        //         fallback=|| "not connected"
-        //     >
-        //         // show is implicitly reactive???
-        //         {
-        //             if let Some(source_tx) = source_tx() {
-        //                 format!("{:?}", source_tx)
-        //             } else {
-        //                 String::from("loading")
-        //             }
-        //         }
-        //     </Show>
-        // </div>
+        <Show when=move || prevout().is_some()>
+            <div class="text-xs border border-solid rounded border-green-400 bg-green-400/10 mb-1 p-1 flex gap-2 justify-between font-bold">
+                {move ||
+                    match prevout() {
+                        Some(Ok(PrevoutInfo::Address { addr, amount })) => Some(view! {
+                            <div class="font-bold">{addr}</div>
+                            <div class="font-bold">{amount} Sats</div>
+                        }.into_any()),
+                        Some(Ok(PrevoutInfo::P2s { amount })) => Some(view! {
+                            <div class="font-bold">P2S</div>
+                            <div class="font-bold">{amount} Sats</div>
+                        }.into_any()),
+                        Some(Ok(PrevoutInfo::Coinbase)) => Some("Coinbase".into_any()),
+                        Some(Err(e)) => Some(e.to_string().into_any()),
+                        None => None,
+                    }
+                }
+            </div>
+        </Show>
         <div class="mb-1 flex">
             <input
                 on:change=move |e| txid.set(event_target_value(&e))
@@ -438,4 +481,11 @@ pub fn TxInput<C: Verification + 'static>(
 
         <TokenData token_data=tx_input.token_data_state />
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PrevoutInfo {
+    Coinbase,
+    P2s { amount: u64 },
+    Address { addr: String, amount: u64 },
 }

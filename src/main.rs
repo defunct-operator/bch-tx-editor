@@ -24,6 +24,7 @@ use leptos::prelude::{
 };
 use leptos::reactive::effect::Effect;
 use leptos::{IntoView, component, logging::log, view};
+use leptos_use::use_element_visibility;
 use macros::StrEnum;
 use tracing::Level;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -37,6 +38,7 @@ use crate::leptos_drag_reorder::{
 };
 use crate::partially_signed::PartiallySignedTransaction;
 use crate::spv::{SpvConnStatus, SpvModal, provide_spv, use_spv};
+use crate::util::script_to_cash_addr;
 
 impl StrEnum for Network {
     fn to_str(self) -> &'static str {
@@ -69,7 +71,7 @@ fn main() {
         .with(WasmLayer::new(WasmLayerConfig::default()))
         .with(
             Targets::new()
-                .with_target("bch_tx_editor", Level::TRACE)
+                // .with_target("bch_tx_editor", Level::TRACE)
                 .with_default(Level::INFO),
         )
         .init();
@@ -194,15 +196,14 @@ fn App() -> impl IntoView {
 
         for (i, output) in tx.output.iter().enumerate() {
             let script_pubkey_hex = output.script_pubkey.to_hex();
-            if output.script_pubkey[0] == 0x6a {
-                // OP_RETURN script
-                tx_outputs[i]
-                    .script_display_format
-                    .set(ScriptDisplayFormat::Asm);
-            } else {
+            if script_to_cash_addr(&output.script_pubkey, network()).is_ok() {
                 tx_outputs[i]
                     .script_display_format
                     .set(ScriptDisplayFormat::Addr);
+            } else {
+                tx_outputs[i]
+                    .script_display_format
+                    .set(ScriptDisplayFormat::Asm);
             }
             tx_outputs[i]
                 .script_pubkey
@@ -359,6 +360,7 @@ fn App() -> impl IntoView {
                                 on_dragend,
                                 ..
                             } = use_drag_reorder::<_, TxInputState>(tx_input.key.to_string());
+                            let is_visible = use_element_visibility(node_ref);
                             let tx_input_key = tx_input.key;
 
                             view! {
@@ -372,7 +374,7 @@ fn App() -> impl IntoView {
                                     on:dragstart=on_dragstart
                                     on:dragend=on_dragend
                                 >
-                                    <TxInput tx_input secp ctx set_draggable/>
+                                    <TxInput tx_input secp ctx set_draggable is_visible/>
                                     <div class="flex justify-between">
                                         <button
                                             on:click=move |_| delete_tx_input(tx_input_key)
