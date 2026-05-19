@@ -88,24 +88,33 @@ pub fn TxOutput(
                 <select
                     class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                     on:input=move |e| {
-                        script_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                        script_format
+                            .set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                     }
-                    prop:value={move || script_format().to_str()}
+                    prop:value=move || script_format().to_str()
                 >
-                    <option value={ScriptDisplayFormat::Addr.to_str()}>Address</option>
-                    <option value={ScriptDisplayFormat::Asm.to_str()}>Asm</option>
-                    <option value={ScriptDisplayFormat::Hex.to_str()}>Hex</option>
+                    <option value=ScriptDisplayFormat::Addr.to_str()>Address</option>
+                    <option value=ScriptDisplayFormat::Asm.to_str()>Asm</option>
+                    <option value=ScriptDisplayFormat::Hex.to_str()>Hex</option>
                 </select>
             </div>
-            <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true) >
+            <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true)>
                 <DragHandle />
             </div>
         </div>
 
         // Amount
         <div class="my-1">
-            <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
-            <ParsedInput value={tx_output_value} {..} id=parsed_input_val_id placeholder="Sats" class=("w-52", true)/>
+            <label class="mr-1" for=parsed_input_val_id.clone()>
+                Sats:
+            </label>
+            <ParsedInput
+                value={tx_output_value}
+                {..}
+                id=parsed_input_val_id
+                placeholder="Sats"
+                class=("w-52", true)
+            />
             <label>
                 <input
                     type="checkbox"

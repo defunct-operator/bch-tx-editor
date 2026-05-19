@@ -42,8 +42,7 @@ pub fn SpvModal(mut on_exit: impl FnMut() + Clone + 'static) -> impl IntoView {
     let spv_modal_node_ref = NodeRef::new();
     _ = on_click_outside(spv_modal_node_ref, move |_| on_exit());
     view! {
-        <div class="fixed top-0 left-0 w-full h-full opacity-50 bg-black">
-        </div>
+        <div class="fixed top-0 left-0 w-full h-full opacity-50 bg-black"></div>
         <div class="fixed top-0 left-0 w-full h-full flex justify-center-safe items-center">
             <div
                 node_ref=spv_modal_node_ref
@@ -64,21 +63,25 @@ pub fn SpvModal(mut on_exit: impl FnMut() + Clone + 'static) -> impl IntoView {
                                 spv.set_address(Some(value));
                             }
                         }
-                        prop:value=move || spv_settings().and_then(|s| s.address).unwrap_or_default()
-                    />
-                    <datalist id="servers">
+                        prop:value=move || {
+                            spv_settings().and_then(|s| s.address).unwrap_or_default()
+                        }
+                    /> <datalist id="servers">
                         <option value="wss://bch.imaginary.cash:50004"></option>
                         <option value="wss://blackie.c3-soft.com:50004"></option>
                     </datalist>
                 </div>
                 <div>Status: {move || spv_status().to_str()}</div>
-                <div>Blockchain: {move ||
-                    if spv_status() == SpvConnStatus::Disabled {
-                        Cow::Borrowed("Not connected")
-                    } else {
-                        Cow::Owned(format!("{} blocks", spv_height()))
-                    }
-                }</div>
+                <div>
+                    Blockchain:
+                    {move || {
+                        if spv_status() == SpvConnStatus::Disabled {
+                            Cow::Borrowed("Not connected")
+                        } else {
+                            Cow::Owned(format!("{} blocks", spv_height()))
+                        }
+                    }}
+                </div>
             </div>
         </div>
     }

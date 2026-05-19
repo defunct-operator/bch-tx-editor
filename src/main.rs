@@ -75,7 +75,7 @@ fn main() {
                 .with_default(Level::INFO),
         )
         .init();
-    mount_to_body(|| view! { <App/> });
+    mount_to_body(|| view! { <App /> });
 }
 
 #[component]

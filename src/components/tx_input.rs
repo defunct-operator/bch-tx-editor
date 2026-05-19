@@ -333,21 +333,29 @@ pub fn TxInput<C: Verification + 'static>(
     view! {
         <Show when=move || prevout().is_some()>
             <div class="text-xs border border-solid rounded border-green-400 bg-green-400/10 mb-1 p-1 flex gap-2 justify-between font-bold">
-                {move ||
-                    match prevout() {
-                        Some(Ok(PrevoutInfo::Address { addr, amount })) => Some(view! {
-                            <div class="font-bold">{addr}</div>
-                            <div class="font-bold">{amount} Sats</div>
-                        }.into_any()),
-                        Some(Ok(PrevoutInfo::P2s { amount })) => Some(view! {
-                            <div class="font-bold">P2S</div>
-                            <div class="font-bold">{amount} Sats</div>
-                        }.into_any()),
-                        Some(Ok(PrevoutInfo::Coinbase)) => Some("Coinbase".into_any()),
-                        Some(Err(e)) => Some(e.to_string().into_any()),
-                        None => None,
+                {move || match prevout() {
+                    Some(Ok(PrevoutInfo::Address { addr, amount })) => {
+                        Some(
+                            view! {
+                                <div class="font-bold">{addr}</div>
+                                <div class="font-bold">{amount}Sats</div>
+                            }
+                                .into_any(),
+                        )
                     }
-                }
+                    Some(Ok(PrevoutInfo::P2s { amount })) => {
+                        Some(
+                            view! {
+                                <div class="font-bold">P2S</div>
+                                <div class="font-bold">{amount}Sats</div>
+                            }
+                                .into_any(),
+                        )
+                    }
+                    Some(Ok(PrevoutInfo::Coinbase)) => Some("Coinbase".into_any()),
+                    Some(Err(e)) => Some(e.to_string().into_any()),
+                    None => None,
+                }}
             </div>
         </Show>
         <div class="mb-1 flex">
@@ -361,8 +369,8 @@ pub fn TxInput<C: Verification + 'static>(
                 placeholder="Transaction ID"
             />
             <span>:</span>
-            <ParsedInput value=tx_input.vout.into() {..} placeholder="Index" class=("w-14", true)/>
-            <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true) >
+            <ParsedInput value=tx_input.vout.into() {..} placeholder="Index" class=("w-14", true) />
+            <div class=("cursor-grab", true) on:mousedown=move |_| set_draggable(true)>
                 <DragHandle />
             </div>
         </div>
@@ -389,20 +397,30 @@ pub fn TxInput<C: Verification + 'static>(
                 <select
                     class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                     on:input=move |e| {
-                        script_sig_format.set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                        script_sig_format
+                            .set(ScriptDisplayFormat::from_str(&event_target_value(&e)).unwrap())
                     }
-                    prop:value={move || script_sig_format().to_str()}
+                    prop:value=move || script_sig_format().to_str()
                     disabled=unsigned
                 >
-                    <option value={ScriptDisplayFormat::Asm.to_str()} selected>Asm</option>
-                    <option value={ScriptDisplayFormat::Hex.to_str()}>Hex</option>
-                    <option value={ScriptDisplayFormat::P2sh.to_str()}>P2SH</option>
+                    <option value=ScriptDisplayFormat::Asm.to_str() selected>
+                        Asm
+                    </option>
+                    <option value=ScriptDisplayFormat::Hex.to_str()>Hex</option>
+                    <option value=ScriptDisplayFormat::P2sh.to_str()>P2SH</option>
                 </select>
             </div>
         </div>
         <div class="my-1">
-            <label class="mr-1" for=parsed_input_seq_id.clone()>Sequence Number:</label>
-            <ParsedInput value=tx_input.sequence.into() {..} id=parsed_input_seq_id placeholder="Sequence"/>
+            <label class="mr-1" for=parsed_input_seq_id.clone()>
+                Sequence Number:
+            </label>
+            <ParsedInput
+                value=tx_input.sequence.into()
+                {..}
+                id=parsed_input_seq_id
+                placeholder="Sequence"
+            />
             <label>
                 <input
                     type="checkbox"
@@ -452,9 +470,12 @@ pub fn TxInput<C: Verification + 'static>(
                     <select
                         class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                         on:input=move |e| {
-                            pubkey_format.set(PubkeyDisplayFormat::from_str(&event_target_value(&e)).unwrap())
+                            pubkey_format
+                                .set(
+                                    PubkeyDisplayFormat::from_str(&event_target_value(&e)).unwrap(),
+                                )
                         }
-                        prop:value={move || pubkey_format().to_str()}
+                        prop:value=move || pubkey_format().to_str()
                     >
                         <option value=PubkeyDisplayFormat::Addr.to_str()>Address</option>
                         <option value=PubkeyDisplayFormat::Asm.to_str()>Asm</option>
@@ -465,8 +486,16 @@ pub fn TxInput<C: Verification + 'static>(
 
             // Amount
             <div class="my-1">
-                <label class="mr-1" for=parsed_input_val_id.clone()>Sats:</label>
-                <ParsedInput value={utxo_amount} {..} placeholder="Sats" class=("w-52", true) id=parsed_input_val_id.clone()/>
+                <label class="mr-1" for=parsed_input_val_id.clone()>
+                    Sats:
+                </label>
+                <ParsedInput
+                    value={utxo_amount}
+                    {..}
+                    placeholder="Sats"
+                    class=("w-52", true)
+                    id=parsed_input_val_id.clone()
+                />
                 <label>
                     <input
                         type="checkbox"

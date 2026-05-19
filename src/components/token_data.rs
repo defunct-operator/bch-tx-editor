@@ -186,7 +186,9 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
         <Show when=cashtoken_enabled>
             // CashToken category
             <div class="mt-3 mb-1 flex">
-                <label for=input_category_id class="mr-1">Category:</label>
+                <label for=input_category_id class="mr-1">
+                    Category:
+                </label>
                 <input
                     id=input_category_id
                     on:change=move |e| category_id.set(event_target_value(&e))
@@ -220,7 +222,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                     value={ft_amount}
                     {..}
                     id=parsed_input_ft_id
-                    disabled={move || !has_ft_amount()}
+                    disabled=move || !has_ft_amount()
                     class=("w-52", true)
                     class=("disabled:opacity-30", true)
                 />
@@ -243,15 +245,14 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                         class="bg-stone-900 border border-stone-600 rounded p-1 disabled:opacity-30"
                         disabled=move || !has_nft()
                         on:input=move |e| {
-                            nft_capability.set(
-                                NftCapability::from_str(&event_target_value(&e)).unwrap()
-                            )
+                            nft_capability
+                                .set(NftCapability::from_str(&event_target_value(&e)).unwrap())
                         }
-                        prop:value={move || nft_capability().to_str()}
+                        prop:value=move || nft_capability().to_str()
                     >
-                        <option value={|| NftCapability::Immutable.to_str()}>Immutable</option>
-                        <option value={|| NftCapability::Mutable.to_str()}>Mutable</option>
-                        <option value={|| NftCapability::Minting.to_str()}>Minting</option>
+                        <option value=|| NftCapability::Immutable.to_str()>Immutable</option>
+                        <option value=|| NftCapability::Mutable.to_str()>Mutable</option>
+                        <option value=|| NftCapability::Minting.to_str()>Minting</option>
                     </select>
 
                     // NFT commitment
@@ -265,7 +266,8 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                         nft_commitment_hex.set(event_target_value(&e));
                                     }
                                     NftCommitmentFormat::Plaintext => {
-                                        nft_commitment_hex.set(event_target_value(&e).as_bytes().to_hex());
+                                        nft_commitment_hex
+                                            .set(event_target_value(&e).as_bytes().to_hex());
                                     }
                                 }
                             }
@@ -282,7 +284,9 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                         nft_commitment_hex()
                                     }
                                     NftCommitmentFormat::Plaintext => 'a: {
-                                        let bytes = match Vec::from_hex(&nft_commitment_hex.read()) {
+                                        let bytes = match Vec::from_hex(
+                                            &nft_commitment_hex.read(),
+                                        ) {
                                             Ok(b) => b,
                                             Err(e) => {
                                                 nft_commitment_error.set(true);
@@ -305,9 +309,9 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                     }
                                 }
                             }
-                            disabled=move || !has_nft()
-                                || nft_commitment_error()
-                                || nft_commitment_lossy()
+                            disabled=move || {
+                                !has_nft() || nft_commitment_error() || nft_commitment_lossy()
+                            }
                             class=("text-red-700", nft_commitment_error)
                             class=("text-yellow-700", nft_commitment_lossy)
                             class=("opacity-30", move || !has_nft())
@@ -317,14 +321,18 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                 class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                                 disabled=move || !has_nft()
                                 on:input=move |e| {
-                                    nft_commitment_format.set(
-                                        NftCommitmentFormat::from_str(&event_target_value(&e)).unwrap()
-                                    )
+                                    nft_commitment_format
+                                        .set(
+                                            NftCommitmentFormat::from_str(&event_target_value(&e))
+                                                .unwrap(),
+                                        )
                                 }
-                                prop:value={move || nft_commitment_format().to_str()}
+                                prop:value=move || nft_commitment_format().to_str()
                             >
-                                <option value={|| NftCommitmentFormat::Hex.to_str()}>Hex</option>
-                                <option value={|| NftCommitmentFormat::Plaintext.to_str()}>Plaintext</option>
+                                <option value=|| NftCommitmentFormat::Hex.to_str()>Hex</option>
+                                <option value=|| {
+                                    NftCommitmentFormat::Plaintext.to_str()
+                                }>Plaintext</option>
                             </select>
                         </div>
                     </div>
