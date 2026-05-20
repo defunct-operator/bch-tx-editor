@@ -305,15 +305,17 @@ pub fn TxInput<C: Verification + 'static>(
 
         let ptx = if spv_status() == SpvConnStatus::Connected {
             if is_visible() {
-                spv.tx_fetcher.get(txid).get()
+                spv.tx_fetcher.get(txid)
+            } else if let Some(p) = spv.tx_fetcher.try_get(&txid) {
+                p
             } else {
-                None
+                return Some(Err("Loading...".into()));
             }
         } else {
-            Some(spv.tx_fetcher.try_get(&txid).and_then(|s| s.get())?)
+            spv.tx_fetcher.try_get(&txid)?
         };
 
-        let ptx = match ptx {
+        let ptx = match ptx() {
             None => return Some(Err("Loading...".into())),
             Some(Err(e)) => return Some(Err(e.to_string())),
             Some(Ok(t)) => t,
@@ -323,7 +325,7 @@ pub fn TxInput<C: Verification + 'static>(
             Err(e) => return Some(Err(format!("failed to decode transaction: {e}"))),
         };
 
-        let Some(txout) = &ptx.output.get(vout.get() as usize) else {
+        let Some(txout) = ptx.output.get(vout.get() as usize) else {
             return Some(Err("Index out of bounds".into()));
         };
         match script_to_cash_addr(&txout.script_pubkey, ctx.network.get()) {
