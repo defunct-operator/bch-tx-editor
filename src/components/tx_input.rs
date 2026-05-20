@@ -338,7 +338,7 @@ pub fn TxInput<C: Verification + 'static>(
                         Some(
                             view! {
                                 <div class="font-bold">{addr}</div>
-                                <div class="font-bold">{amount}Sats</div>
+                                <div class="font-bold">{amount}" Sats"</div>
                             }
                                 .into_any(),
                         )
@@ -347,7 +347,7 @@ pub fn TxInput<C: Verification + 'static>(
                         Some(
                             view! {
                                 <div class="font-bold">P2S</div>
-                                <div class="font-bold">{amount}Sats</div>
+                                <div class="font-bold">{amount}" Sats"</div>
                             }
                                 .into_any(),
                         )
@@ -360,6 +360,8 @@ pub fn TxInput<C: Verification + 'static>(
         </Show>
         <div class="mb-1 flex">
             <input
+                autocomplete="off"
+                spellcheck="false"
                 on:change=move |e| txid.set(event_target_value(&e))
                 class=concat!(
                     "border border-solid rounded border-stone-600 px-1 w-full bg-stone-900 ",
@@ -395,6 +397,7 @@ pub fn TxInput<C: Verification + 'static>(
             />
             <div>
                 <select
+                    autocomplete="off"
                     class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                     on:input=move |e| {
                         script_sig_format
@@ -442,6 +445,7 @@ pub fn TxInput<C: Verification + 'static>(
             // UTXO Address
             <div class="mt-3 mb-1 flex">
                 <textarea
+                    autocomplete="off"
                     spellcheck="false"
                     rows=1
                     on:change=move |e| {
@@ -468,6 +472,7 @@ pub fn TxInput<C: Verification + 'static>(
                 />
                 <div>
                     <select
+                        autocomplete="off"
                         class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                         on:input=move |e| {
                             pubkey_format

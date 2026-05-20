@@ -292,6 +292,7 @@ fn App() -> impl IntoView {
                     </div>
                     <div class="table-cell">
                         <select
+                            autocomplete="off"
                             class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                             on:input=move |e| {
                                 network.set(Network::from_str(&event_target_value(&e)).unwrap())
@@ -326,6 +327,7 @@ fn App() -> impl IntoView {
                     </div>
                     <div class="table-cell">
                         <select
+                            autocomplete="off"
                             class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                             on:input=move |e| {
                                 spv.set_enabled(event_target_value(&e) == "enabled");
@@ -500,6 +502,7 @@ fn App() -> impl IntoView {
             </button>
             <span>{serialize_message}</span>
             <textarea
+                autocomplete="off"
                 spellcheck="false"
                 class="border border-solid rounded border-stone-600 px-1 w-full placeholder:text-stone-600 font-mono grow my-1"
                 class=("bg-stone-900", move || !tx_hex_errored())

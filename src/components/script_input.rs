@@ -277,6 +277,7 @@ pub fn ScriptInput(
 
     view! {
         <textarea
+            autocomplete="off"
             spellcheck="false"
             on:change=move |e| {
                 match format() {

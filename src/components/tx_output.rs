@@ -86,6 +86,7 @@ pub fn TxOutput(
             />
             <div>
                 <select
+                    autocomplete="off"
                     class="bg-stone-900 border border-stone-600 rounded ml-1 p-1"
                     on:input=move |e| {
                         script_format

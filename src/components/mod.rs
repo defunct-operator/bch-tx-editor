@@ -3,7 +3,8 @@ use std::str::FromStr;
 use leptos::{
     IntoView, component,
     prelude::{
-        ClassAttribute, OnAttribute, PropAttribute, ReadSignal, RwSignal, Set, event_target_value,
+        ClassAttribute, GlobalAttributes, OnAttribute, PropAttribute, ReadSignal, RwSignal, Set,
+        event_target_value,
     },
     tachys::html::property::IntoProperty,
     view,
@@ -27,6 +28,8 @@ where
 
     view! {
         <input
+            autocomplete="off"
+            spellcheck="false"
             on:input=move |e| {
                 let new_value = event_target_value(&e);
                 match new_value.parse() {

@@ -190,6 +190,8 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                     Category:
                 </label>
                 <input
+                    autocomplete="off"
+                    spellcheck="false"
                     id=input_category_id
                     on:change=move |e| category_id.set(event_target_value(&e))
                     class=concat!(
@@ -242,6 +244,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                 // NFT Capability
                 <div class="grow">
                     <select
+                        autocomplete="off"
                         class="bg-stone-900 border border-stone-600 rounded p-1 disabled:opacity-30"
                         disabled=move || !has_nft()
                         on:input=move |e| {
@@ -258,6 +261,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                     // NFT commitment
                     <div class="my-1 flex">
                         <textarea
+                            autocomplete="off"
                             spellcheck="false"
                             rows=1
                             on:change=move |e| {
@@ -318,6 +322,7 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                         />
                         <div>
                             <select
+                                autocomplete="off"
                                 class="bg-stone-900 border border-stone-600 rounded ml-1 p-1 disabled:opacity-30"
                                 disabled=move || !has_nft()
                                 on:input=move |e| {
