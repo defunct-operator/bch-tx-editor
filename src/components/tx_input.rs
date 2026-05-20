@@ -1,32 +1,37 @@
 use anyhow::Result;
-use bitcoincash::consensus::Decodable;
-use bitcoincash::hashes::hex::ToHex;
-use bitcoincash::secp256k1::{Secp256k1, Verification};
-use bitcoincash::{OutPoint, Script, Sequence, Transaction, TxIn, Txid};
-use leptos::prelude::{
-    AddAnyAttr, ArcRwSignal, ClassAttribute, ElementChild, Get, GlobalAttributes, OnAttribute,
-    PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue, Write, event_target_checked,
-    event_target_value,
+use bitcoincash::{
+    OutPoint, Script, Sequence, Transaction, TxIn, Txid,
+    consensus::Decodable,
+    hashes::hex::ToHex,
+    secp256k1::{Secp256k1, Verification},
 };
-use leptos::reactive::computed::Memo;
-use leptos::reactive::signal::ReadSignal;
-use leptos::reactive::wrappers::read::Signal;
-use leptos::tachys::view::any_view::IntoAny;
-use leptos::{IntoView, component, view};
+use leptos::{
+    IntoView, component,
+    prelude::{
+        AddAnyAttr, ArcRwSignal, ClassAttribute, ElementChild, Get, GlobalAttributes, OnAttribute,
+        PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue, Write, event_target_checked,
+        event_target_value,
+    },
+    reactive::{computed::Memo, signal::ReadSignal, wrappers::read::Signal},
+    tachys::view::any_view::IntoAny,
+    view,
+};
 
 use super::script_input::ScriptInputValue;
-use crate::Context;
-use crate::components::drag_handle::DragHandle;
-use crate::components::script_input::{ScriptDisplayFormat, ScriptInput};
-use crate::components::{
-    ParsedInput,
-    token_data::{TokenData, TokenDataState},
+use crate::{
+    Context,
+    components::{
+        ParsedInput,
+        drag_handle::DragHandle,
+        script_input::{ScriptDisplayFormat, ScriptInput},
+        token_data::{TokenData, TokenDataState},
+    },
+    js_reexport::bin_to_cash_assembly,
+    macros::StrEnum,
+    partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn},
+    spv::{SpvConnStatus, use_spv},
+    util::{cash_addr_to_script, script_to_cash_addr},
 };
-use crate::js_reexport::bin_to_cash_assembly;
-use crate::macros::StrEnum;
-use crate::partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn};
-use crate::spv::{SpvConnStatus, use_spv};
-use crate::util::{cash_addr_to_script, script_to_cash_addr};
 
 str_enum! {
     #[derive(Copy, Clone, Default)]

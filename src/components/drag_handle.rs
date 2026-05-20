@@ -1,5 +1,4 @@
-use leptos::prelude::*;
-use leptos::{IntoView, component, view};
+use leptos::{IntoView, component, prelude::*, view};
 
 #[component]
 pub fn DragHandle() -> impl IntoView {

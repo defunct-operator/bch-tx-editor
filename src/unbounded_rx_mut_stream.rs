@@ -1,7 +1,9 @@
 // Modified from https://docs.rs/tokio-stream/0.1.18/src/tokio_stream/wrappers/mpsc_unbounded.rs.html#34-36
 
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use futures::Stream;
 use tokio::sync::mpsc::UnboundedReceiver;
