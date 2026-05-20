@@ -40,7 +40,7 @@ impl<F: FnOnce()> DropGuard<F> {
         }
     }
 
-    pub fn _disarm(mut self) {
+    pub fn disarm(mut self) {
         self.on_drop = None;
     }
 }

@@ -67,13 +67,13 @@ impl StrEnum for Network {
 
 fn main() {
     console_error_panic_hook::set_once();
+    let mut targets = Targets::new().with_default(Level::INFO);
+    if cfg!(debug_assertions) {
+        targets = targets.with_target("bch_tx_editor", Level::TRACE);
+    }
     tracing_subscriber::registry()
         .with(WasmLayer::new(WasmLayerConfig::default()))
-        .with(
-            Targets::new()
-                // .with_target("bch_tx_editor", Level::TRACE)
-                .with_default(Level::INFO),
-        )
+        .with(targets)
         .init();
     mount_to_body(|| view! { <App /> });
 }
@@ -231,6 +231,9 @@ fn App() -> impl IntoView {
 
     let tx_fetcher = spv.tx_fetcher.clone();
     Effect::new(move || {
+        if spv_status() != SpvConnStatus::Connected {
+            txid_to_load.write().clear();
+        }
         let txid_to_load = txid_to_load();
         let txid_to_load = txid_to_load.trim();
         if txid_to_load.is_empty() {

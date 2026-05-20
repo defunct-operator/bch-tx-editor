@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     collections::hash_map::Entry,
     pin::pin,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use bitcoincash::Txid;
@@ -173,13 +173,17 @@ async fn conn_task(
     height(current_tip.height);
     info!(?current_tip, "Subscribed to headers");
 
-    // Currently, only one instance of conn_task is expected to be running at a time. We could
-    // potentially switch to an MPMC channel later.
+    // Currently, only one instance of conn_task is expected to be running at a time, so holding the
+    // lock across awaits is fine. We could potentially switch to an MPMC channel in the future.
     let mut requests = tx_cache.requests.try_lock().unwrap();
     let request_handler =
         UnboundedReceiverMutStream::new(&mut requests).for_each_concurrent(10, |txid| {
             let client = &client;
             let tx_cache = &*tx_cache;
+            let requeue_guard = DropGuard::new(move || {
+                trace!(?txid, "Requeuing request");
+                tx_cache.request_sender.send(txid).unwrap();
+            });
             async move {
                 let r = client
                     .blockchain_transaction_get(txid)
@@ -188,11 +192,12 @@ async fn conn_task(
                     .map_err(|e| TxCacheError::RpcError(Arc::new(e)));
                 tx_cache
                     .map
-                    .write()
+                    .lock()
                     .unwrap()
                     .get(&txid)
                     .unwrap()
                     .set(Some(r));
+                requeue_guard.disarm();
             }
         });
 
@@ -285,7 +290,10 @@ type Map<K, V> = std::collections::HashMap<K, V>;
 
 /// A cache for transaction requests. Ensures that only one request is made per TXID.
 pub struct TxCache {
-    map: RwLock<Map<Txid, ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>>>>,
+    // Since we're running in the browser, everything is on a single thread so technically these
+    // could just be RefCells, but leptos requires Send + Sync in various places which is annoying
+    // to get around.
+    map: Mutex<Map<Txid, ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>>>>,
     requests: Mutex<mpsc::UnboundedReceiver<Txid>>,
     request_sender: mpsc::UnboundedSender<Txid>,
 }
@@ -294,7 +302,7 @@ impl TxCache {
     /// Lookup a transaction by TXID. If not present in the cache, queues a request to fetch it.
     pub fn get(&self, txid: Txid) -> ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>> {
         let mut is_new = false;
-        let entry = match self.map.write().unwrap().entry(txid) {
+        let entry = match self.map.lock().unwrap().entry(txid) {
             Entry::Occupied(e) => e,
             Entry::Vacant(vacant_entry) => {
                 is_new = true;
@@ -317,7 +325,7 @@ impl TxCache {
         &self,
         txid: &Txid,
     ) -> Option<ArcRwSignal<Option<Result<Arc<[u8]>, TxCacheError>>>> {
-        self.map.read().unwrap().get(txid).cloned()
+        self.map.lock().unwrap().get(txid).cloned()
     }
 }
 

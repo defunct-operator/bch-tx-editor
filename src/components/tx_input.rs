@@ -318,7 +318,9 @@ pub fn TxInput<C: Verification + 'static>(
             Err(e) => return Some(Err(format!("failed to decode transaction: {e}"))),
         };
 
-        let txout = &ptx.output[vout.get() as usize];
+        let Some(txout) = &ptx.output.get(vout.get() as usize) else {
+            return Some(Err("Index out of bounds".into()));
+        };
         match script_to_cash_addr(&txout.script_pubkey, ctx.network.get()) {
             Ok(addr) => Some(Ok(PrevoutInfo::Address {
                 addr,
@@ -362,10 +364,22 @@ pub fn TxInput<C: Verification + 'static>(
             <input
                 autocomplete="off"
                 spellcheck="false"
-                on:change=move |e| txid.set(event_target_value(&e))
+                on:change=move |e| {
+                    let mut v = event_target_value(&e);
+                    v.retain(|c| !c.is_whitespace());
+                    txid.set(v);
+                }
                 class=concat!(
-                    "border border-solid rounded border-stone-600 px-1 w-full bg-stone-900 ",
-                    "placeholder:text-stone-600 font-mono grow",
+                    "border border-solid rounded px-1 w-full bg-stone-900 font-mono grow",
+                    "placeholder:text-stone-600",
+                )
+                class=(
+                    "border-stone-600",
+                    move || txid().is_empty() || txid().parse::<Txid>().is_ok(),
+                )
+                class=(
+                    "border-red-700",
+                    move || !txid().is_empty() && txid().parse::<Txid>().is_err(),
                 )
                 prop:value=txid
                 placeholder="Transaction ID"
