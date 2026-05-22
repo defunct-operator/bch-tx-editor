@@ -1,6 +1,7 @@
 use anyhow::Result;
 use bitcoincash::{
     OutPoint, Script, Sequence, Transaction, TxIn, Txid,
+    blockdata::token,
     consensus::Decodable,
     hashes::hex::ToHex,
     secp256k1::{Secp256k1, Verification},
@@ -329,34 +330,69 @@ pub fn TxInput<C: Verification + 'static>(
             return Some(Err("Index out of bounds".into()));
         };
         match script_to_cash_addr(&txout.script_pubkey, ctx.network.get()) {
-            Ok(addr) => Some(Ok(PrevoutInfo::Address {
+            Ok(addr) => Some(Ok(PrevoutInfo::Normal {
                 addr,
                 amount: txout.value,
+                token: txout.token.clone(),
             })),
-            Err(_) => Some(Ok(PrevoutInfo::P2s {
+            Err(_) => Some(Ok(PrevoutInfo::Normal {
+                addr: "P2S".into(),
                 amount: txout.value,
+                token: txout.token.clone(),
             })),
         }
     });
 
     view! {
         <Show when=move || prevout().is_some()>
-            <div class="text-xs border border-solid rounded border-green-400 bg-green-400/10 mb-1 p-1 flex gap-2 justify-between font-bold">
+            <div class="text-xs border border-solid rounded border-green-400 bg-green-400/10 mb-1 p-1 font-bold">
                 {move || match prevout() {
-                    Some(Ok(PrevoutInfo::Address { addr, amount })) => {
+                    Some(Ok(PrevoutInfo::Normal { addr, amount, token })) => {
                         Some(
                             view! {
-                                <div class="font-bold">{addr}</div>
-                                <div class="font-bold">{amount}" Sats"</div>
-                            }
-                                .into_any(),
-                        )
-                    }
-                    Some(Ok(PrevoutInfo::P2s { amount })) => {
-                        Some(
-                            view! {
-                                <div class="font-bold">P2S</div>
-                                <div class="font-bold">{amount}" Sats"</div>
+                                <div class="flex gap-2 justify-between">
+                                    <div>{addr}</div>
+                                    <div>{amount}" Sats"</div>
+                                </div>
+                                {token
+                                    .map(|token| {
+                                        let amount_div = token
+                                            .has_amount()
+                                            .then(|| {
+                                                view! { <div>Fungible Amount: {token.amount}</div> }
+                                            });
+                                        let capability_div = token
+                                            .has_nft()
+                                            .then(|| {
+                                                view! {
+                                                    <div>
+                                                        Capability:
+                                                        {match token.capability() {
+                                                            0 => "Immutable",
+                                                            1 => "Mutable",
+                                                            2 => "Minting",
+                                                            _ => "???",
+                                                        }}
+                                                    </div>
+                                                }
+                                            });
+                                        let commitment_str = token
+                                            .has_commitment_length()
+                                            .then(|| {
+                                                format!("Commitment: {}", token.commitment.to_hex())
+                                            });
+                                        view! {
+                                            <div class="flex justify-end font-bold mt-1">
+                                                <div class="border border-solid rounded border-blue-400 bg-blue-400/10 p-1 flex gap-3 justify-between">
+                                                    <div>
+                                                        Category ID: {token.id.to_string()} <br /> {commitment_str}
+                                                    </div>
+                                                    {capability_div}
+                                                    {amount_div}
+                                                </div>
+                                            </div>
+                                        }
+                                    })}
                             }
                                 .into_any(),
                         )
@@ -541,6 +577,9 @@ pub fn TxInput<C: Verification + 'static>(
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PrevoutInfo {
     Coinbase,
-    P2s { amount: u64 },
-    Address { addr: String, amount: u64 },
+    Normal {
+        addr: String,
+        amount: u64,
+        token: Option<token::OutputData>,
+    },
 }
