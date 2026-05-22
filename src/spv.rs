@@ -5,7 +5,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoincash::Txid;
+use bitcoincash::{
+    Txid,
+    hashes::{Hash, sha256d},
+};
 use futures::{FutureExt, StreamExt, future::Either};
 use gloo::storage::{LocalStorage, Storage};
 use jsonrpsee::core::ClientError;
@@ -185,11 +188,18 @@ async fn conn_task(
                 tx_cache.request_sender.send(txid).unwrap();
             });
             async move {
-                let r = client
+                let mut r = client
                     .blockchain_transaction_get(txid)
                     .await
                     .map(Arc::<[u8]>::from)
                     .map_err(|e| TxCacheError::RpcError(Arc::new(e)));
+                requeue_guard.disarm();
+                if let Ok(tx) = &r {
+                    let hash = sha256d::Hash::hash(tx);
+                    if hash != txid.as_hash() {
+                        r = Err(TxCacheError::IdMismatch);
+                    }
+                }
                 tx_cache
                     .map
                     .lock()
@@ -197,7 +207,6 @@ async fn conn_task(
                     .get(&txid)
                     .unwrap()
                     .set(Some(r));
-                requeue_guard.disarm();
             }
         });
 
@@ -348,4 +357,6 @@ pub enum TxCacheError {
     RpcError(Arc<ClientError>),
     #[error("transaction not found")]
     NotFound,
+    #[error("the server responded with a transaction for a different txid")]
+    IdMismatch,
 }
