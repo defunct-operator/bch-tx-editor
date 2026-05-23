@@ -13,7 +13,7 @@ use leptos::{
         PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue, Write, event_target_checked,
         event_target_value,
     },
-    reactive::{computed::Memo, signal::ReadSignal, wrappers::read::Signal},
+    reactive::{computed::Memo, signal::ReadSignal, traits::GetUntracked, wrappers::read::Signal},
     tachys::view::any_view::IntoAny,
     view,
 };
@@ -70,6 +70,12 @@ impl UtxoPubkeyData {
             Self::Addr(_) => true,
             Self::Hex(s) if s.is_empty() => true,
             _ => false,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Addr(s) | Self::Hex(s) => s.is_empty(),
         }
     }
 
@@ -329,17 +335,24 @@ pub fn TxInput<C: Verification + 'static>(
         let Some(txout) = ptx.output.get(vout.get() as usize) else {
             return Some(Err("Index out of bounds".into()));
         };
+        utxo_amount.set(txout.value);
         match script_to_cash_addr(&txout.script_pubkey, ctx.network.get()) {
-            Ok(addr) => Some(Ok(PrevoutInfo::Normal {
-                addr,
-                amount: txout.value,
-                token: txout.token.clone(),
-            })),
-            Err(_) => Some(Ok(PrevoutInfo::Normal {
-                addr: "P2S".into(),
-                amount: txout.value,
-                token: txout.token.clone(),
-            })),
+            Ok(addr) => {
+                utxo_pubkey.set(UtxoPubkeyData::Addr(addr.clone()));
+                Some(Ok(PrevoutInfo::Normal {
+                    addr,
+                    amount: txout.value,
+                    token: txout.token.clone(),
+                }))
+            }
+            Err(_) => {
+                utxo_pubkey.set(Default::default());
+                Some(Ok(PrevoutInfo::Normal {
+                    addr: "P2S".into(),
+                    amount: txout.value,
+                    token: txout.token.clone(),
+                }))
+            }
         }
     });
 
@@ -352,7 +365,7 @@ pub fn TxInput<C: Verification + 'static>(
                             view! {
                                 <div class="flex gap-2 justify-between">
                                     <div>{addr}</div>
-                                    <div>{amount}" Sats"</div>
+                                    <div>{amount}" sats"</div>
                                 </div>
                                 {token
                                     .map(|token| {

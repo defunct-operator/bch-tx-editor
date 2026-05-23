@@ -9,6 +9,8 @@ pub mod spv;
 pub mod unbounded_rx_mut_stream;
 pub mod util;
 
+use std::{convert::identity, num::NonZero};
+
 use anyhow::Result;
 use bitcoincash::{
     Network, PackedLockTime, Transaction, Txid,
@@ -25,6 +27,7 @@ use components::{
 };
 use leptos::{
     IntoView, component,
+    either::EitherOr,
     logging::log,
     prelude::{
         AddAnyAttr, ClassAttribute, ElementChild, ForEnumerate, Get, GlobalAttributes,
@@ -354,7 +357,10 @@ fn App() -> impl IntoView {
 
             // Inputs
             <div class="basis-lg grow">
-                <p class="mb-1 text-xl">Inputs</p>
+                <div class="flex gap-8 mb-1 items-end">
+                    <div class="text-xl">"Inputs (" {move || tx_inputs.read().len()} ")"</div>
+                    <div>Total: {move || tx_inputs.read().iter().try_fold(0, |a, txi| Some(a + NonZero::new(txi.utxo_amount.get())?.get())).either_or(identity, |()| "???")} sats</div>
+                </div>
                 <ol node_ref=txinput_column_ref start="0">
                     <ForEnumerate
                         each=tx_inputs
@@ -410,7 +416,10 @@ fn App() -> impl IntoView {
 
             // Outputs
             <div class="basis-lg grow">
-                <p class="mb-1 text-xl">Outputs</p>
+                <div class="flex gap-8 mb-1 items-end">
+                    <div class="text-xl">"Outputs (" {move || tx_outputs.read().len()} ")"</div>
+                    <div>Total: {move || tx_outputs.read().iter().map(|txo| txo.value.get()).sum::<u64>()} sats</div>
+                </div>
                 <ol node_ref=txoutput_column_ref start="0">
                     <ForEnumerate
                         each=tx_outputs
