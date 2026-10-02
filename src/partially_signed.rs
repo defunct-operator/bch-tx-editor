@@ -1,7 +1,8 @@
 use std::fmt::LowerHex;
 
 use bitcoincash::{
-    Address, Network, OutPoint, PackedLockTime, Script, Sequence, Transaction, TxIn, TxOut, VarInt,
+    Address, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, VarInt,
+    bip32::{ChildNumber, Xpub as ExtendedPubKey},
     blockdata::{
         opcodes::{
             Class, ClassifyContext,
@@ -14,37 +15,36 @@ use bitcoincash::{
         Decodable, Encodable,
         encode::{self, MAX_VEC_SIZE},
     },
-    psbt::serialize::{Deserialize, Serialize},
+    io::{Error as BchIoError, Read as BchIoRead, Write as BchIoWrite},
+    script::PushBytes,
     secp256k1::{Secp256k1, Verification},
-    util::bip32::{ChildNumber, ExtendedPubKey},
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-pub struct UnsignedScriptSig(Script);
+pub struct UnsignedScriptSig(ScriptBuf);
 
 impl Encodable for UnsignedScriptSig {
     #[inline]
-    fn consensus_encode<W: std::io::Write + ?Sized>(
-        &self,
-        w: &mut W,
-    ) -> Result<usize, std::io::Error> {
+    fn consensus_encode<W: BchIoWrite + ?Sized>(&self, w: &mut W) -> Result<usize, BchIoError> {
         self.0.consensus_encode(w)
     }
 }
 
 impl Decodable for UnsignedScriptSig {
     #[inline]
-    fn consensus_decode_from_finite_reader<R: std::io::Read + ?Sized>(
+    fn consensus_decode_from_finite_reader<R: BchIoRead + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, bitcoincash::consensus::encode::Error> {
-        Ok(Self(Script::consensus_decode_from_finite_reader(reader)?))
+        Ok(Self(ScriptBuf::consensus_decode_from_finite_reader(
+            reader,
+        )?))
     }
 
     #[inline]
-    fn consensus_decode<R: std::io::Read + ?Sized>(
+    fn consensus_decode<R: BchIoRead + ?Sized>(
         reader: &mut R,
     ) -> Result<Self, bitcoincash::consensus::encode::Error> {
-        Ok(Self(Script::consensus_decode(reader)?))
+        Ok(Self(ScriptBuf::consensus_decode(reader)?))
     }
 }
 
@@ -57,19 +57,19 @@ impl LowerHex for UnsignedScriptSig {
 
 impl UnsignedScriptSig {
     /// 0xFD: unknown pubkey, but we know the Bitcoin address, i.e. the script pubkey.
-    pub fn from_script_pubkey(script_pubkey: Script) -> Self {
+    pub fn from_script_pubkey(script_pubkey: ScriptBuf) -> Self {
         let mut prefixed_pubkey = vec![0xfd];
         prefixed_pubkey.extend_from_slice(script_pubkey.as_bytes());
         Self(
             script::Builder::new()
-                .push_slice(&[0xff])
-                .push_slice(&prefixed_pubkey)
+                .push_slice([0xff])
+                .push_slice::<&PushBytes>(prefixed_pubkey[..].try_into().unwrap())
                 .into_script(),
         )
     }
 
     /// Get the inner script pubkey.
-    pub fn script_pubkey<C: Verification>(&self, secp: &Secp256k1<C>) -> Option<Script> {
+    pub fn script_pubkey<C: Verification>(&self, secp: &Secp256k1<C>) -> Option<ScriptBuf> {
         let mut iter = self.0.instructions();
         let Instruction::PushBytes(first_push) = iter.next()?.ok()? else {
             return None;
@@ -80,39 +80,45 @@ impl UnsignedScriptSig {
                 return None;
             };
             let mut redeem_script = script::Builder::new();
-            for ins in Script::from(fake_redeem_script.to_vec()).instructions() {
+            for ins in ScriptBuf::from(fake_redeem_script.as_bytes().to_vec()).instructions() {
                 match ins.ok()? {
                     Instruction::Op(op) => redeem_script = redeem_script.push_opcode(op),
                     Instruction::PushBytes(xpubkey) => {
-                        redeem_script =
-                            redeem_script.push_key(&ec_ff_parse_xpubkey(secp, xpubkey)?.to_pub())
+                        redeem_script = redeem_script.push_key(
+                            &ec_ff_parse_xpubkey(secp, xpubkey.as_bytes())?
+                                .to_pub()
+                                .into(),
+                        )
                     }
                 }
             }
             return Some(redeem_script.into_script().to_p2sh());
-        } else if first_push != [0xff] {
+        } else if first_push.as_bytes() != [0xff] {
             return None;
         }
         match iter.next()?.ok()? {
-            Instruction::PushBytes([0xfd, spk @ ..]) => Some(spk.to_vec().into()),
-            Instruction::PushBytes(bytes @ [0xff, ..]) => {
-                let xpubkey = ec_ff_parse_xpubkey(secp, bytes)?;
-                Some(Script::new_p2pkh(&xpubkey.to_pub().pubkey_hash()))
-            }
+            Instruction::PushBytes(pb) => match pb.as_bytes() {
+                [0xfd, spk @ ..] => Some(spk.to_vec().into()),
+                bytes @ [0xff, ..] => {
+                    let xpubkey = ec_ff_parse_xpubkey(secp, bytes)?;
+                    Some(ScriptBuf::new_p2pkh(&xpubkey.to_pub().pubkey_hash()))
+                }
+                _ => None,
+            },
             _ => None,
         }
     }
 
     /// The bare script as it would appear in an Electron Cash unsigned transaction.
-    pub fn raw_script(&self) -> &Script {
+    pub fn raw_script(&self) -> &ScriptBuf {
         &self.0
     }
 
-    pub fn into_raw_script(self) -> Script {
+    pub fn into_raw_script(self) -> ScriptBuf {
         self.0
     }
 
-    pub fn from_raw_script(s: Script) -> Self {
+    pub fn from_raw_script(s: ScriptBuf) -> Self {
         Self(s)
     }
 }
@@ -142,7 +148,7 @@ fn ec_ff_parse_xpubkey<C: Verification>(
 fn is_unsigned_p2pkh_payload(s: &[u8]) -> bool {
     match s {
         [0xfd, spk @ ..] => {
-            Address::from_script(&Script::from(spk.to_vec()), Network::Bitcoin).is_ok()
+            Address::from_script(&ScriptBuf::from(spk.to_vec()), Network::Bitcoin).is_ok()
         }
         [0xfe | 0xff | 0x02..=0x04, ..] => true, // TODO actually parse?
         _ => false,
@@ -150,7 +156,7 @@ fn is_unsigned_p2pkh_payload(s: &[u8]) -> bool {
 }
 
 fn is_multisig(script: &[u8], num_sigs: usize) -> bool {
-    let script = Script::from(script.to_vec());
+    let script = ScriptBuf::from(script.to_vec());
     let Ok(instructions): Result<Vec<_>, _> = script.instructions().collect() else {
         return false;
     };
@@ -180,25 +186,25 @@ fn is_multisig(script: &[u8], num_sigs: usize) -> bool {
     *checkmultisig == Instruction::Op(OP_CHECKMULTISIG) && m == num_sigs && n == pubkeys.len()
 }
 
-fn is_unsigned_script_sig(s: &Script) -> bool {
+fn is_unsigned_script_sig(s: &ScriptBuf) -> bool {
     let mut ins = s.instructions();
     match ins.next() {
         // Possibly unsigned p2pkh or unsigned p2sh without xpubkeys
-        Some(Ok(Instruction::PushBytes(&[0xff]))) => match ins.next() {
+        Some(Ok(Instruction::PushBytes(pb))) if pb.as_bytes() == [0xff] => match ins.next() {
             Some(Ok(Instruction::PushBytes(payload))) => {
-                is_unsigned_p2pkh_payload(payload) && ins.next().is_none()
+                is_unsigned_p2pkh_payload(payload.as_bytes()) && ins.next().is_none()
             }
             _ => false,
         },
         // Possibly multisig with xpubkeys
-        Some(Ok(Instruction::PushBytes(&[]))) => {
+        Some(Ok(Instruction::PushBytes(pb))) if pb.is_empty() => {
             let mut num_pushes = 0;
             let mut last = None;
             for x in ins {
                 match x {
                     Ok(Instruction::PushBytes(b)) => {
                         num_pushes += 1;
-                        last = Some(b);
+                        last = Some(b.as_bytes());
                     }
                     _ => return false,
                 }
@@ -236,10 +242,7 @@ pub struct UnsignedTxIn {
 }
 
 impl Encodable for UnsignedTxIn {
-    fn consensus_encode<W: std::io::Write + ?Sized>(
-        &self,
-        w: &mut W,
-    ) -> Result<usize, std::io::Error> {
+    fn consensus_encode<W: BchIoWrite + ?Sized>(&self, w: &mut W) -> Result<usize, BchIoError> {
         let mut len = 0;
         len += self.previous_output.consensus_encode(w)?;
         len += self.unsigned_script_sig.consensus_encode(w)?;
@@ -261,7 +264,7 @@ impl Encodable for UnsignedTxIn {
 }
 
 impl Decodable for UnsignedTxIn {
-    fn consensus_decode_from_finite_reader<R: std::io::Read + ?Sized>(
+    fn consensus_decode_from_finite_reader<R: BchIoRead + ?Sized>(
         r: &mut R,
     ) -> Result<Self, encode::Error> {
         let previous_output = OutPoint::consensus_decode_from_finite_reader(r)?;
@@ -334,7 +337,7 @@ impl MaybeUnsignedTxIn {
         }
     }
 
-    pub fn script_sig(&self) -> Option<&Script> {
+    pub fn script_sig(&self) -> Option<&ScriptBuf> {
         match self {
             Self::Unsigned(_) => None,
             Self::Signed(t) => Some(&t.script_sig),
@@ -343,10 +346,7 @@ impl MaybeUnsignedTxIn {
 }
 
 impl Encodable for MaybeUnsignedTxIn {
-    fn consensus_encode<W: std::io::Write + ?Sized>(
-        &self,
-        w: &mut W,
-    ) -> Result<usize, std::io::Error> {
+    fn consensus_encode<W: BchIoWrite + ?Sized>(&self, w: &mut W) -> Result<usize, BchIoError> {
         match self {
             MaybeUnsignedTxIn::Unsigned(s) => s.consensus_encode(w),
             MaybeUnsignedTxIn::Signed(s) => s.consensus_encode(w),
@@ -355,11 +355,11 @@ impl Encodable for MaybeUnsignedTxIn {
 }
 
 impl Decodable for MaybeUnsignedTxIn {
-    fn consensus_decode_from_finite_reader<R: std::io::Read + ?Sized>(
+    fn consensus_decode_from_finite_reader<R: BchIoRead + ?Sized>(
         r: &mut R,
     ) -> Result<Self, encode::Error> {
         let previous_output = OutPoint::consensus_decode_from_finite_reader(r)?;
-        let script_sig = Script::consensus_decode_from_finite_reader(r)?;
+        let script_sig = ScriptBuf::consensus_decode_from_finite_reader(r)?;
         let sequence = Sequence::consensus_decode_from_finite_reader(r)?;
         if is_unsigned_script_sig(&script_sig) {
             let mut value = u64::consensus_decode_from_finite_reader(r)?;
@@ -404,24 +404,18 @@ impl Decodable for MaybeUnsignedTxIn {
 }
 
 trait MyEncodable {
-    fn consensus_encode<W: std::io::Write + ?Sized>(
-        &self,
-        w: &mut W,
-    ) -> Result<usize, std::io::Error>;
+    fn consensus_encode<W: BchIoWrite + ?Sized>(&self, w: &mut W) -> Result<usize, BchIoError>;
 }
 
 trait MyDecodable: Sized {
-    fn consensus_decode_from_finite_reader<R: std::io::Read + ?Sized>(
+    fn consensus_decode_from_finite_reader<R: BchIoRead + ?Sized>(
         r: &mut R,
     ) -> Result<Self, encode::Error>;
 }
 
 impl MyEncodable for Vec<MaybeUnsignedTxIn> {
     #[inline]
-    fn consensus_encode<W: std::io::Write + ?Sized>(
-        &self,
-        w: &mut W,
-    ) -> Result<usize, std::io::Error> {
+    fn consensus_encode<W: BchIoWrite + ?Sized>(&self, w: &mut W) -> Result<usize, BchIoError> {
         let mut len = 0;
         len += VarInt(self.len() as u64).consensus_encode(w)?;
         for c in self.iter() {
@@ -433,7 +427,7 @@ impl MyEncodable for Vec<MaybeUnsignedTxIn> {
 
 impl MyDecodable for Vec<MaybeUnsignedTxIn> {
     #[inline]
-    fn consensus_decode_from_finite_reader<R: std::io::Read + ?Sized>(
+    fn consensus_decode_from_finite_reader<R: BchIoRead + ?Sized>(
         r: &mut R,
     ) -> Result<Self, encode::Error> {
         let len = VarInt::consensus_decode_from_finite_reader(r)?.0;
@@ -465,7 +459,7 @@ pub struct PartiallySignedTransaction {
     ///
     /// * [BIP-65 OP_CHECKLOCKTIMEVERIFY](https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki)
     /// * [BIP-113 Median time-past as endpoint for lock-time calculations](https://github.com/bitcoin/bips/blob/master/bip-0113.mediawiki)
-    pub lock_time: PackedLockTime,
+    pub lock_time: u32,
     /// List of transaction inputs, possibly unsigned.
     pub input: Vec<MaybeUnsignedTxIn>,
     /// List of transaction outputs.
@@ -473,10 +467,7 @@ pub struct PartiallySignedTransaction {
 }
 
 impl Encodable for PartiallySignedTransaction {
-    fn consensus_encode<W: std::io::Write + ?Sized>(
-        &self,
-        w: &mut W,
-    ) -> Result<usize, std::io::Error> {
+    fn consensus_encode<W: BchIoWrite + ?Sized>(&self, w: &mut W) -> Result<usize, BchIoError> {
         Ok(self.version.consensus_encode(w)?
             + self.input.consensus_encode(w)?
             + self.output.consensus_encode(w)?
@@ -485,7 +476,7 @@ impl Encodable for PartiallySignedTransaction {
 }
 
 impl Decodable for PartiallySignedTransaction {
-    fn consensus_decode_from_finite_reader<R: std::io::Read + ?Sized>(
+    fn consensus_decode_from_finite_reader<R: BchIoRead + ?Sized>(
         r: &mut R,
     ) -> Result<Self, encode::Error> {
         Ok(Self {
@@ -500,25 +491,25 @@ impl Decodable for PartiallySignedTransaction {
 impl From<Transaction> for PartiallySignedTransaction {
     fn from(t: Transaction) -> Self {
         Self {
-            version: t.version,
-            lock_time: t.lock_time,
+            version: t.version.0,
+            lock_time: t.lock_time.to_consensus_u32(),
             input: t.input.into_iter().map(MaybeUnsignedTxIn::Signed).collect(),
             output: t.output,
         }
     }
 }
 
-impl Deserialize for PartiallySignedTransaction {
-    fn deserialize(bytes: &[u8]) -> Result<Self, encode::Error> {
-        bitcoincash::consensus::deserialize(bytes)
-    }
-}
-
-impl Serialize for PartiallySignedTransaction {
-    fn serialize(&self) -> Vec<u8> {
-        bitcoincash::consensus::serialize(self)
-    }
-}
+// impl Deserialize for PartiallySignedTransaction {
+//     fn deserialize(bytes: &[u8]) -> Result<Self, encode::Error> {
+//         bitcoincash::consensus::deserialize(bytes)
+//     }
+// }
+//
+// impl Serialize for PartiallySignedTransaction {
+//     fn serialize(&self) -> Vec<u8> {
+//         bitcoincash::consensus::serialize(self)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

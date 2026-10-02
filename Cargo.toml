@@ -7,10 +7,10 @@ version = "0.1.0"
 edition = "2024"
 
 [package.metadata.bin]
-trunk = { version = "0.22.0-beta.1", git = "https://github.com/trunk-rs/trunk", rev = "1705946833dd1bc60c1ff36517dd8f443f84b991" }
+trunk = { version = "0.22.0-rc.1" }
 
 [dependencies]
-bitcoincash = { version = "0.29.2", features = ["rand"] }
+bitcoincash = { version = "0.32.4", features = ["rand"] }
 cashaddr = "0.2.0"
 gloo = { version = "0.12.0", features = ["timers", "futures"] }
 jsonrpsee = { version = "0.26.0", features = ["wasm-client", "client-web-transport"] }
@@ -22,7 +22,7 @@ wasm-bindgen = "0.2.87"
 anyhow = "1.0.75"
 console_error_panic_hook = "0.1.7"
 web-sys = { version = "0.3.70", features = ["DataTransfer", "Document", "DomRect", "Element", "NodeList"] }
-leptos-use = { version = "0.18.3", features = ["on_click_outside", "storage", "use_element_visibility"], default-features = false }
+leptos-use = { version = "0.19.2", features = ["on_click_outside", "storage", "use_element_visibility"], default-features = false }
 tracing = "0.1.44"
 tokio-stream = { version = "0.1.18", default-features = false, features = ["sync"] }
 thiserror = "2.0.18"

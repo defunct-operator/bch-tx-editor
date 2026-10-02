@@ -1,9 +1,9 @@
 use anyhow::Result;
 use bitcoincash::{
-    OutPoint, Script, Sequence, Transaction, TxIn, Txid,
+    OutPoint, ScriptBuf, Sequence, Transaction, TxIn, Txid,
     blockdata::token,
     consensus::Decodable,
-    hashes::hex::ToHex,
+    hashes::hex::DisplayHex,
     secp256k1::{Secp256k1, Verification},
 };
 use leptos::{
@@ -13,7 +13,7 @@ use leptos::{
         PropAttribute, ReadValue, RwSignal, Set, Show, StoredValue, Write, event_target_checked,
         event_target_value,
     },
-    reactive::{computed::Memo, signal::ReadSignal, traits::GetUntracked, wrappers::read::Signal},
+    reactive::{computed::Memo, signal::ReadSignal, wrappers::read::Signal},
     tachys::view::any_view::IntoAny,
     view,
 };
@@ -92,7 +92,7 @@ impl TryFrom<UtxoPubkeyData> for UnsignedScriptSig {
         match s {
             UtxoPubkeyData::Hex(mut s) => {
                 s.retain(|c| !c.is_ascii_whitespace());
-                Ok(UnsignedScriptSig::from_raw_script(s.parse::<Script>()?))
+                Ok(UnsignedScriptSig::from_raw_script(ScriptBuf::from_hex(&s)?))
             }
             UtxoPubkeyData::Addr(s) => Ok(UnsignedScriptSig::from_script_pubkey(
                 cash_addr_to_script(&s)?,
@@ -141,7 +141,7 @@ impl TxInputState {
         match input {
             MaybeUnsignedTxIn::Signed(txin) => {
                 self.script_sig
-                    .set(ScriptInputValue::Hex(txin.script_sig.to_hex()));
+                    .set(ScriptInputValue::Hex(txin.script_sig.to_hex_string()));
                 self.script_sig_format.set(ScriptDisplayFormat::Asm);
                 self.unsigned.set(false);
                 self.utxo_pubkey.set(Default::default());
@@ -153,7 +153,7 @@ impl TxInputState {
                 self.script_sig_format.set(ScriptDisplayFormat::Hex);
                 self.unsigned.set(true);
                 self.utxo_pubkey.set(UtxoPubkeyData::Hex(
-                    txin.unsigned_script_sig.raw_script().to_hex(),
+                    txin.unsigned_script_sig.raw_script().to_hex_string(),
                 ));
                 self.utxo_amount.set(txin.value);
                 self.token_data_state
@@ -241,7 +241,7 @@ pub fn TxInput<C: Verification + 'static>(
                     Ok(s) => {
                         utxo_pubkey_enabled.set(true);
                         utxo_pubkey_error.set(false);
-                        s.to_hex()
+                        s.raw_script().to_hex_string()
                     }
                     Err(e) => {
                         utxo_pubkey_enabled.set(false);
@@ -306,7 +306,7 @@ pub fn TxInput<C: Verification + 'static>(
         let Ok(txid) = txid().parse::<Txid>() else {
             return None;
         };
-        if *txid == [0; 32] {
+        if txid.as_ref() == [0; 32] {
             return Some(Ok(PrevoutInfo::Coinbase));
         }
 
@@ -335,13 +335,13 @@ pub fn TxInput<C: Verification + 'static>(
         let Some(txout) = ptx.output.get(vout.get() as usize) else {
             return Some(Err("Index out of bounds".into()));
         };
-        utxo_amount.set(txout.value);
+        utxo_amount.set(txout.value.to_sat());
         match script_to_cash_addr(&txout.script_pubkey, ctx.network.get()) {
             Ok(addr) => {
                 utxo_pubkey.set(UtxoPubkeyData::Addr(addr.clone()));
                 Some(Ok(PrevoutInfo::Normal {
                     addr,
-                    amount: txout.value,
+                    amount: txout.value.to_sat(),
                     token: txout.token.clone(),
                 }))
             }
@@ -349,7 +349,7 @@ pub fn TxInput<C: Verification + 'static>(
                 utxo_pubkey.set(Default::default());
                 Some(Ok(PrevoutInfo::Normal {
                     addr: "P2S".into(),
-                    amount: txout.value,
+                    amount: txout.value.to_sat(),
                     token: txout.token.clone(),
                 }))
             }
@@ -372,7 +372,9 @@ pub fn TxInput<C: Verification + 'static>(
                                         let amount_div = token
                                             .has_amount()
                                             .then(|| {
-                                                view! { <div>Fungible Amount: {token.amount}</div> }
+                                                view! {
+                                                    <div>Fungible Amount: {token.amount.to_int()}</div>
+                                                }
                                             });
                                         let capability_div = token
                                             .has_nft()
@@ -392,7 +394,10 @@ pub fn TxInput<C: Verification + 'static>(
                                         let commitment_str = token
                                             .has_commitment_length()
                                             .then(|| {
-                                                format!("Commitment: {}", token.commitment.to_hex())
+                                                format!(
+                                                    "Commitment: {}",
+                                                    token.commitment.to_lower_hex_string(),
+                                                )
                                             });
                                         view! {
                                             <div class="flex justify-end font-bold mt-1">

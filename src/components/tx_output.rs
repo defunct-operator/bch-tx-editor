@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bitcoincash::TxOut;
+use bitcoincash::{Amount, TxOut};
 use leptos::{
     IntoView, component,
     prelude::{
@@ -48,7 +48,7 @@ impl TryFrom<TxOutputState> for TxOut {
         let script_pubkey = tx_output.script_pubkey.get().try_into()?;
         let token = tx_output.token_data_state.token_data()?;
         Ok(TxOut {
-            value: tx_output.value.get(),
+            value: Amount::from_sat(tx_output.value.get()),
             script_pubkey,
             token,
         })

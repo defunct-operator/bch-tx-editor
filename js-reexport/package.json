@@ -6,9 +6,12 @@
     "build": "esbuild index.js --bundle --minify --format=esm --outfile=dist/reexports.js"
   },
   "dependencies": {
-    "@bitauth/libauth": "^3.0.0"
+    "@bitauth/libauth": "^3.1.0-next.8"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

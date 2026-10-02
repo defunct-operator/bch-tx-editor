@@ -196,7 +196,7 @@ async fn conn_task(
                 requeue_guard.disarm();
                 if let Ok(tx) = &r {
                     let hash = sha256d::Hash::hash(tx);
-                    if hash != txid.as_hash() {
+                    if hash != *txid.as_raw_hash() {
                         r = Err(TxCacheError::IdMismatch);
                     }
                 }

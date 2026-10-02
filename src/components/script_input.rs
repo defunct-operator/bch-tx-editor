@@ -1,12 +1,12 @@
 use std::fmt::Write as _;
 
 use bitcoincash::{
-    Network, Script,
+    Network, ScriptBuf,
     blockdata::{
         opcodes::{Class, ClassifyContext},
         script::Instruction,
     },
-    hashes::hex::ToHex,
+    hashes::hex::{Case, DisplayHex},
 };
 use leptos::{
     IntoView, component,
@@ -74,13 +74,13 @@ fn format_cashassembly(src: &str, base_level: usize) -> String {
     r
 }
 
-fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
+fn disassemble_p2sh_script_sig(s: ScriptBuf) -> Result<String, String> {
     let mut r = String::new();
     let mut instructions = s.instructions_minimal().peekable();
     while let Some(ins) = instructions.next() {
         let is_last = instructions.peek().is_none();
         let data = match ins {
-            Ok(Instruction::PushBytes([])) => Either::Right(0),
+            Ok(Instruction::PushBytes(x)) if x.is_empty() => Either::Right(0),
             Ok(Instruction::PushBytes(x)) => Either::Left(x),
             Ok(Instruction::Op(op)) => {
                 if let Class::PushNum(n) = op.classify(ClassifyContext::Legacy) {
@@ -94,7 +94,7 @@ fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
         if is_last {
             let mut buf = [0; 8];
             let d = match data {
-                Either::Left(d) => d,
+                Either::Left(d) => d.as_bytes(),
                 Either::Right(n) => {
                     let b = write_scriptint(&mut buf, n.into());
                     &buf[..b]
@@ -112,7 +112,7 @@ fn disassemble_p2sh_script_sig(s: Script) -> Result<String, String> {
             match data {
                 Either::Left(d) => {
                     r.push_str("<0x");
-                    r.push_str(&d.to_hex());
+                    d.as_bytes().append_hex_to_string(Case::Lower, &mut r);
                 }
                 Either::Right(n) => {
                     _ = write!(r, "<{}", n);
@@ -167,16 +167,16 @@ impl ScriptInputValue {
     }
 }
 
-impl TryFrom<ScriptInputValue> for Script {
+impl TryFrom<ScriptInputValue> for ScriptBuf {
     type Error = anyhow::Error;
     fn try_from(s: ScriptInputValue) -> Result<Self, Self::Error> {
         match s {
             ScriptInputValue::Hex(mut s) => {
                 s.retain(|c| !c.is_ascii_whitespace());
-                Ok(s.parse::<Script>()?)
+                Ok(ScriptBuf::from_hex(&s)?)
             }
             ScriptInputValue::Addr(s) => cash_addr_to_script(&s),
-            ScriptInputValue::Asm(s) => Ok(Script::from(cash_assembly_to_bin(&s)?.into_vec())),
+            ScriptInputValue::Asm(s) => Ok(ScriptBuf::from(cash_assembly_to_bin(&s)?.into_vec())),
         }
     }
 }
@@ -216,17 +216,17 @@ pub fn ScriptInput(
             return value.inner().into();
         }
         match format {
-            ScriptDisplayFormat::Hex => match Script::try_from(value) {
+            ScriptDisplayFormat::Hex => match ScriptBuf::try_from(value) {
                 Ok(s) => {
                     error.set(false);
-                    s.to_hex()
+                    s.to_hex_string()
                 }
                 Err(e) => {
                     error.set(true);
                     e.to_string()
                 }
             },
-            ScriptDisplayFormat::Asm => match Script::try_from(value) {
+            ScriptDisplayFormat::Asm => match ScriptBuf::try_from(value) {
                 Ok(s) => {
                     error.set(false);
                     let mut s = bin_to_cash_assembly(s.as_bytes().into());
@@ -240,7 +240,7 @@ pub fn ScriptInput(
                     e.to_string()
                 }
             },
-            ScriptDisplayFormat::P2sh => match Script::try_from(value)
+            ScriptDisplayFormat::P2sh => match ScriptBuf::try_from(value)
                 .map_err(|e| e.to_string())
                 .and_then(disassemble_p2sh_script_sig)
             {
@@ -254,7 +254,7 @@ pub fn ScriptInput(
                 }
             },
             ScriptDisplayFormat::Addr => {
-                let script: Script = match value.try_into() {
+                let script: ScriptBuf = match value.try_into() {
                     Ok(s) => s,
                     Err(e) => {
                         error.set(true);

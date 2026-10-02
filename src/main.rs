@@ -13,10 +13,9 @@ use std::{convert::identity, num::NonZero};
 
 use anyhow::Result;
 use bitcoincash::{
-    Network, PackedLockTime, Transaction, Txid,
+    Network, Transaction, Txid,
     consensus::encode,
-    hashes::hex::{FromHex, ToHex},
-    psbt::serialize::{Deserialize, Serialize},
+    hashes::hex::{DisplayHex, FromHex},
     secp256k1::Secp256k1,
 };
 use components::{
@@ -58,6 +57,7 @@ impl StrEnum for Network {
             Network::Testnet4 => "testnet4",
             Network::Scalenet => "scalenet",
             Network::Chipnet => "chipnet",
+            _ => "uhh wtf???",
         }
     }
 
@@ -154,18 +154,18 @@ fn App() -> impl IntoView {
             .collect::<Result<_, _>>()?;
         let tx = PartiallySignedTransaction {
             version: tx_version.get(),
-            lock_time: PackedLockTime(tx_locktime.get()),
+            lock_time: tx_locktime.get(),
             input,
             output,
         };
-        let tx_serialized = tx.serialize();
+        let tx_serialized = encode::serialize_hex(&tx);
         let mut sm = serialize_message.write();
         if sm.is_empty() || sm.ends_with('.') {
-            *sm = format!("{} bytes", tx_serialized.len());
+            *sm = format!("{} bytes", tx_serialized.len() / 2);
         } else {
-            *sm = format!("{} bytes.", tx_serialized.len());
+            *sm = format!("{} bytes.", tx_serialized.len() / 2);
         }
-        Ok(tx_serialized.to_hex())
+        Ok(tx_serialized)
     };
     let deserialize_tx = move || -> Result<()> {
         serialize_message.set(String::new());
@@ -176,8 +176,10 @@ fn App() -> impl IntoView {
                 .filter(|c| !c.is_whitespace())
                 .collect::<String>(),
         )?;
-        let tx = PartiallySignedTransaction::deserialize(&hex)
-            .or_else::<encode::Error, _>(|_| Ok(Transaction::deserialize(&hex)?.into()))?;
+        let tx: PartiallySignedTransaction = encode::deserialize(&hex)
+            .or_else::<encode::Error, _>(
+                |_| Ok(encode::deserialize::<Transaction>(&hex)?.into()),
+            )?;
         let mut tx_inputs = tx_inputs.write();
         let mut tx_outputs = tx_outputs.write();
 
@@ -197,14 +199,14 @@ fn App() -> impl IntoView {
         }
 
         tx_version.set(tx.version);
-        tx_locktime.set(tx.lock_time.0);
+        tx_locktime.set(tx.lock_time);
 
         for (i, input) in tx.input.iter().enumerate() {
             tx_inputs[i].update_from_txin(input);
         }
 
         for (i, output) in tx.output.iter().enumerate() {
-            let script_pubkey_hex = output.script_pubkey.to_hex();
+            let script_pubkey_hex = output.script_pubkey.to_hex_string();
             if script_to_cash_addr(&output.script_pubkey, network()).is_ok() {
                 tx_outputs[i]
                     .script_display_format
@@ -217,7 +219,7 @@ fn App() -> impl IntoView {
             tx_outputs[i]
                 .script_pubkey
                 .set(ScriptInputValue::Hex(script_pubkey_hex));
-            tx_outputs[i].value.set(output.value);
+            tx_outputs[i].value.set(output.value.to_sat());
 
             tx_outputs[i]
                 .token_data_state
@@ -261,7 +263,7 @@ fn App() -> impl IntoView {
             None => (),
             Some(Ok(tx_raw)) => {
                 serialize_message.write().clear();
-                tx_hex(tx_raw.to_hex());
+                tx_hex(tx_raw.to_lower_hex_string());
                 tx_hex_errored(false);
                 if let Err(e) = untrack(deserialize_tx) {
                     log!("Deserialization error: {e}");

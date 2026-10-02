@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bitcoincash::{
-    TokenID,
+    TokenAmount,
     blockdata::token::{Capability, OutputData, Structure},
-    hashes::hex::{FromHex, ToHex},
+    hashes::hex::{DisplayHex, FromHex},
 };
 use leptos::{
     IntoView, component,
@@ -107,9 +107,9 @@ impl TokenDataState {
                     structure |= Structure::HasCommitmentLength as u8;
                 }
                 Some(OutputData {
-                    id: TokenID::from_hex(&self.category_id.read())?,
+                    id: self.category_id.read().parse()?,
                     bitfield: structure | capability as u8,
-                    amount: ft_amount,
+                    amount: TokenAmount::from_int(ft_amount).context("negative token amount")?,
                     commitment,
                 })
             }
@@ -131,10 +131,10 @@ impl TokenDataState {
             }
             Some(token_data) => {
                 self.cashtoken_enabled.set(true);
-                self.category_id.set(token_data.id.to_hex());
-                self.has_ft_amount.set(token_data.amount != 0);
+                self.category_id.set(token_data.id.to_string());
+                self.has_ft_amount.set(token_data.amount.to_int() != 0);
                 self.ft_amount
-                    .set(u64::try_from(token_data.amount).unwrap());
+                    .set(u64::try_from(token_data.amount.to_int()).unwrap());
                 let has_nft = token_data.has_nft();
                 self.has_nft.set(has_nft);
                 if has_nft {
@@ -148,7 +148,8 @@ impl TokenDataState {
                         },
                     );
                     if token_data.has_commitment_length() {
-                        self.nft_commitment_hex.set(token_data.commitment.to_hex());
+                        self.nft_commitment_hex
+                            .set(token_data.commitment.to_lower_hex_string());
                     } else {
                         self.nft_commitment_hex.write().clear();
                     }
@@ -271,7 +272,9 @@ pub fn TokenData(token_data: TokenDataState) -> impl IntoView {
                                     }
                                     NftCommitmentFormat::Plaintext => {
                                         nft_commitment_hex
-                                            .set(event_target_value(&e).as_bytes().to_hex());
+                                            .set(
+                                                event_target_value(&e).as_bytes().to_lower_hex_string(),
+                                            );
                                     }
                                 }
                             }

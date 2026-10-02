@@ -1,6 +1,8 @@
 use bitcoincash::{
-    Address, Network, Script,
+    Address, Network, Script, ScriptBuf,
+    address::NetworkUnchecked,
     blockdata::{opcodes, script::Builder},
+    script::PushBytes,
 };
 use cashaddr::CashEnc;
 
@@ -12,7 +14,7 @@ pub fn is_p2sh32(s: &Script) -> bool {
         && s[34] == opcodes::all::OP_EQUAL.to_u8()
 }
 
-pub fn cash_addr_to_script(addr: &str) -> anyhow::Result<Script> {
+pub fn cash_addr_to_script(addr: &str) -> anyhow::Result<ScriptBuf> {
     match addr.parse::<cashaddr::Payload>() {
         Ok(addr) => match addr.hash_type().numeric_value() {
             0 | 2 => {
@@ -20,7 +22,7 @@ pub fn cash_addr_to_script(addr: &str) -> anyhow::Result<Script> {
                 Ok(Builder::new()
                     .push_opcode(opcodes::all::OP_DUP)
                     .push_opcode(opcodes::all::OP_HASH160)
-                    .push_slice(&addr)
+                    .push_slice::<&PushBytes>(addr[..].try_into().unwrap())
                     .push_opcode(opcodes::all::OP_EQUALVERIFY)
                     .push_opcode(opcodes::all::OP_CHECKSIG)
                     .into_script())
@@ -29,12 +31,12 @@ pub fn cash_addr_to_script(addr: &str) -> anyhow::Result<Script> {
                 // p2sh, token-aware p2sh
                 20 => Ok(Builder::new()
                     .push_opcode(opcodes::all::OP_HASH160)
-                    .push_slice(&addr)
+                    .push_slice::<&PushBytes>(addr[..].try_into().unwrap())
                     .push_opcode(opcodes::all::OP_EQUAL)
                     .into_script()),
                 32 => Ok(Builder::new()
                     .push_opcode(opcodes::all::OP_HASH256)
-                    .push_slice(&addr)
+                    .push_slice::<&PushBytes>(addr[..].try_into().unwrap())
                     .push_opcode(opcodes::all::OP_EQUAL)
                     .into_script()),
                 _ => anyhow::bail!("unknown CashAddress type"),
@@ -42,19 +44,20 @@ pub fn cash_addr_to_script(addr: &str) -> anyhow::Result<Script> {
             _ => anyhow::bail!("unknown CashAddress type"),
         },
         Err(e) => {
-            let Ok(addr) = addr.parse::<Address>() else {
+            let Ok(addr) = addr.parse::<Address<NetworkUnchecked>>() else {
                 Err(e)?
             };
-            Ok(addr.script_pubkey())
+            Ok(addr.assume_checked().script_pubkey())
         }
     }
 }
 
-pub fn script_to_cash_addr(s: &Script, network: Network) -> anyhow::Result<String> {
+pub fn script_to_cash_addr(s: &ScriptBuf, network: Network) -> anyhow::Result<String> {
     let prefix = match network {
         Network::Bitcoin => "bitcoincash",
         Network::Regtest => "bchreg",
         Network::Testnet | Network::Testnet4 | Network::Scalenet | Network::Chipnet => "bchtest",
+        _ => "bchtest",
     };
     if is_p2sh32(s) {
         let hash = &s.as_bytes()[2..34];
