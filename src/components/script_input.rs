@@ -20,7 +20,7 @@ use leptos::{
 
 use crate::{
     js_reexport::{bin_to_cash_assembly, cash_assembly_to_bin},
-    util::{cash_addr_to_script, script_to_cash_addr},
+    util::{addr_to_script, script_to_cash_addr},
 };
 
 // copied from https://docs.rs/bitcoincash/0.29.2/src/bitcoincash/blockdata/script.rs.html#224-253
@@ -175,7 +175,7 @@ impl TryFrom<ScriptInputValue> for ScriptBuf {
                 s.retain(|c| !c.is_ascii_whitespace());
                 Ok(ScriptBuf::from_hex(&s)?)
             }
-            ScriptInputValue::Addr(s) => cash_addr_to_script(&s),
+            ScriptInputValue::Addr(s) => addr_to_script(&s),
             ScriptInputValue::Asm(s) => Ok(ScriptBuf::from(cash_assembly_to_bin(&s)?.into_vec())),
         }
     }

@@ -31,7 +31,7 @@ use crate::{
     macros::StrEnum,
     partially_signed::{MaybeUnsignedTxIn, UnsignedScriptSig, UnsignedTxIn},
     spv::{SpvConnStatus, use_spv},
-    util::{cash_addr_to_script, script_to_cash_addr},
+    util::{addr_to_script, script_to_cash_addr},
 };
 
 str_enum! {
@@ -94,9 +94,9 @@ impl TryFrom<UtxoPubkeyData> for UnsignedScriptSig {
                 s.retain(|c| !c.is_ascii_whitespace());
                 Ok(UnsignedScriptSig::from_raw_script(ScriptBuf::from_hex(&s)?))
             }
-            UtxoPubkeyData::Addr(s) => Ok(UnsignedScriptSig::from_script_pubkey(
-                cash_addr_to_script(&s)?,
-            )),
+            UtxoPubkeyData::Addr(s) => {
+                Ok(UnsignedScriptSig::from_script_pubkey(addr_to_script(&s)?))
+            }
         }
     }
 }
