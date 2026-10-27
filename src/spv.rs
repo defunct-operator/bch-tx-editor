@@ -22,7 +22,7 @@ use leptos::{
     reactive::traits::Set,
     view,
 };
-use leptos_use::on_click_outside;
+use leptos_use_on_click_outside::on_click_outside;
 use thiserror::Error;
 use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::WatchStream;

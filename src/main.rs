@@ -39,7 +39,7 @@ use leptos::{
 use leptos_drag_reorder::{
     HoverPosition, UseDragReorderReturn, provide_drag_reorder, use_drag_reorder,
 };
-use leptos_use::use_element_visibility;
+use leptos_use_element_visibility::use_element_visibility;
 use macros::StrEnum;
 use partially_signed::PartiallySignedTransaction;
 use spv::{SpvConnStatus, SpvModal, provide_spv, use_spv};
